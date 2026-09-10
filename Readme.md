@@ -1,5 +1,7 @@
 # ⚔️ LeagueDex
 
+## Raphaël Verchain Master 2 CCM
+
 Une application iOS native, fluide et moderne, servant d'encyclopédie (façon Pokédex) pour l'univers de **League of Legends**. 
 Retrouvez toutes les informations sur vos champions préférés et les objets du jeu, avec une interface premium et un support **100% hors-ligne**.
 
