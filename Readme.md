@@ -18,7 +18,7 @@ Retrouvez toutes les informations sur vos champions préférés et les objets du
 *   **Base de données locale :** SwiftData
 *   **Réseau & Asynchronisme :** `async/await` et URLSession
 *   **Architecture :** MVVM (Model-View-ViewModel) + "Lazy Fetching" (chargement des détails à la demande pour économiser la data).
-*   **API :** [Riot Games Data Dragon](https://developer.riotgames.com/docs/lol)
+*   **API :** [Riot Games Data Dragon](https://developer.riotgames.com/docs/lol) // Pas accessible avec la connexion de l'UPJV
 
 ## 🚀 Installation & Prérequis
 
