@@ -24,6 +24,7 @@ struct RealStatCard: View {
     let icon: String
     let color: Color
     let value: Double
+    @Environment(\.accessibilityReduceMotion) private var reduceMotion
 
     var body: some View {
         HStack(spacing: LeagueTheme.Space.sm) {
@@ -40,6 +41,8 @@ struct RealStatCard: View {
                 Text(value.formatted(.number.precision(.fractionLength(1))))
                     .font(.headline.monospacedDigit())
                     .foregroundStyle(LeagueTheme.text)
+                    .contentTransition(.numericText())
+                    .animation(reduceMotion ? nil : LeagueMotion.quick, value: value)
             }
             Spacer(minLength: 0)
         }
