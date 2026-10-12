@@ -1,53 +1,44 @@
 import SwiftUI
 import MapKit
 import CoreLocation
-import UIKit
 
 private enum VenueKind: String, CaseIterable, Identifiable {
     case all = "Tous"
     case bars = "Bars e-sport"
     case lan = "Salles LAN"
+    case other = "Autres"
 
     var id: Self { self }
 
     func includes(_ venue: DBVenue) -> Bool {
+        let isBar = venue.type.localizedCaseInsensitiveContains("bar")
+        let isLAN = venue.type.localizedCaseInsensitiveContains("LAN")
         switch self {
         case .all: return true
-        case .bars: return venue.type.localizedCaseInsensitiveContains("Bar")
-        case .lan: return venue.type.localizedCaseInsensitiveContains("LAN")
+        case .bars: return isBar
+        case .lan: return isLAN
+        case .other: return !isBar && !isLAN
         }
     }
 }
 
 struct VenuesMapView: View {
+    @StateObject private var viewModel = VenueViewModel()
     @StateObject private var locationManager = LocationManager()
+
     @State private var cameraPosition: MapCameraPosition = .region(
         MKCoordinateRegion(
             center: CLLocationCoordinate2D(latitude: 46.6033, longitude: 1.8883),
             span: MKCoordinateSpan(latitudeDelta: 6, longitudeDelta: 6)
         )
     )
-    @State private var selectedVenueID: String?
     @State private var selectedKind: VenueKind = .all
-    @Environment(\.openURL) private var openURL
+    @State private var selectedVenue: DBVenue?
+    @State private var addingVenue = false
     @Environment(\.accessibilityReduceMotion) private var reduceMotion
 
-    // Conserve les lieux existants et leurs données d'itinéraire.
-    private let venues = [
-        DBVenue(id: "1", name: "Meltdown Paris", address: "6 Passage des Vernonnes, Paris",
-                latitude: 48.866, longitude: 2.352, type: "Bar E-sport"),
-        DBVenue(id: "2", name: "Esport Arena Lyon", address: "Place Bellecour, Lyon",
-                latitude: 45.757, longitude: 4.832, type: "Salle LAN"),
-        DBVenue(id: "3", name: "Meltdown Lille", address: "14 Rue Masséna, Lille",
-                latitude: 50.637, longitude: 3.058, type: "Bar E-sport")
-    ]
-
     private var visibleVenues: [DBVenue] {
-        venues.filter { selectedKind.includes($0) }
-    }
-
-    private var selectedVenue: DBVenue? {
-        visibleVenues.first { $0.id == selectedVenueID }
+        viewModel.venues.filter { selectedKind.includes($0) }
     }
 
     var body: some View {
@@ -56,10 +47,9 @@ struct VenuesMapView: View {
                 ScrollView(.horizontal, showsIndicators: false) {
                     HStack(spacing: LeagueTheme.Space.sm) {
                         ForEach(VenueKind.allCases) { kind in
-                            LeagueFilterChip(title: kind.rawValue, isSelected: selectedKind == kind) {
-                                UISelectionFeedbackGenerator().selectionChanged()
+                            LeagueFilterChip(title: kind.rawValue,
+                                             isSelected: selectedKind == kind) {
                                 selectedKind = kind
-                                if selectedVenue == nil { selectedVenueID = nil }
                             }
                         }
                     }
@@ -69,173 +59,146 @@ struct VenuesMapView: View {
                 .background(LeagueTheme.surface)
 
                 HStack(spacing: LeagueTheme.Space.sm) {
-                    Text("\(visibleVenues.count) lieu(x)")
-                        .font(.subheadline)
+                    Text("\(visibleVenues.count) lieux")
+                        .font(.subheadline.weight(.semibold))
                         .foregroundStyle(LeagueTheme.muted)
-                    Spacer()
+                        .lineLimit(1)
+                        .minimumScaleFactor(0.8)
+                    Spacer(minLength: 4)
+
                     Menu {
                         ForEach(visibleVenues) { venue in
                             Button(venue.name) { focus(on: venue) }
                         }
                     } label: {
-                        Label("Choisir un lieu", systemImage: "list.bullet")
-                            .font(.subheadline.weight(.medium))
+                        Image(systemName: "list.bullet")
+                            .frame(width: 44, height: 44)
                             .foregroundStyle(LeagueTheme.gold)
-                            .frame(minHeight: 44)
                     }
-                    .accessibilityHint("Affiche la liste des lieux disponibles sur la carte")
-                    .accessibilityValue("\(visibleVenues.count) lieux disponibles")
-                    if locationManager.isLocating {
-                        ProgressView()
-                            .tint(LeagueTheme.gold)
-                            .accessibilityLabel("Recherche de votre position")
-                    }
-                    Button(action: recenterOnUser) {
+                    .accessibilityLabel("Choisir un lieu dans la liste")
+
+                    Button(action: focusOnUser) {
                         Image(systemName: "location.fill")
                             .frame(width: 44, height: 44)
-                            .foregroundStyle(
-                                locationManager.userLocation == nil
-                                    ? LeagueTheme.muted : LeagueTheme.gold
-                            )
+                            .foregroundStyle(LeagueTheme.gold)
                     }
-                    .disabled(locationManager.userLocation == nil)
-                    .accessibilityLabel("Recentrer sur ma position")
-                    .accessibilityHint("Centre la carte sur votre dernière position connue")
+                    .accessibilityLabel("Recentrer ou actualiser ma position")
+
+                    Button { addingVenue = true } label: {
+                        Image(systemName: "plus.circle.fill")
+                            .frame(width: 44, height: 44)
+                            .font(.title3)
+                            .foregroundStyle(LeagueTheme.gold)
+                    }
+                    .accessibilityLabel("Ajouter un lieu sur la carte")
                 }
                 .padding(.horizontal, LeagueTheme.Space.md)
                 .background(LeagueTheme.background)
 
-                if let message = locationManager.locationError {
-                    HStack(alignment: .center, spacing: LeagueTheme.Space.sm) {
-                        Image(systemName: "location.slash")
-                            .accessibilityHidden(true)
-                        Text(message)
+                if let error = viewModel.errorMessage {
+                    Text(error)
+                        .font(.caption)
+                        .foregroundStyle(LeagueTheme.danger)
+                        .frame(maxWidth: .infinity, alignment: .leading)
+                        .padding(LeagueTheme.Space.md)
+                        .background(LeagueTheme.surface)
+                }
+
+                if let warning = locationManager.locationError {
+                    HStack(spacing: LeagueTheme.Space.sm) {
+                        Text(warning)
                             .font(.caption)
-                            .fixedSize(horizontal: false, vertical: true)
+                            .foregroundStyle(LeagueTheme.muted)
                         Spacer(minLength: 0)
                         if locationManager.authorizationStatus != .denied
                             && locationManager.authorizationStatus != .restricted {
                             Button("Réessayer") { locationManager.requestLocation() }
-                                .font(.subheadline.weight(.medium))
+                                .font(.caption.weight(.bold))
                                 .foregroundStyle(LeagueTheme.gold)
-                                .frame(minHeight: 44)
                         }
                     }
-                    .foregroundStyle(LeagueTheme.muted)
-                    .padding(.horizontal, LeagueTheme.Space.md)
+                    .padding(LeagueTheme.Space.md)
                     .background(LeagueTheme.surface)
-                    .accessibilityElement(children: .contain)
                 }
 
-                ZStack(alignment: .bottom) {
-                    Map(position: $cameraPosition, selection: $selectedVenueID) {
+                ZStack(alignment: .topTrailing) {
+                    Map(position: $cameraPosition) {
                         UserAnnotation()
                         ForEach(visibleVenues) { venue in
                             Annotation(venue.name, coordinate: venue.coordinate) {
-                                Image(systemName: "gamecontroller.fill")
-                                    .font(.system(size: 16))
-                                    .padding(12)
-                                    .background(LeagueTheme.gold, in: Circle())
-                                    .foregroundStyle(LeagueTheme.background)
-                                    .scaleEffect(selectedVenueID == venue.id && !reduceMotion ? 1.12 : 1)
-                                    .animation(reduceMotion ? nil : LeagueMotion.quick, value: selectedVenueID)
-                                    .overlay {
-                                        Circle().strokeBorder(LeagueTheme.text.opacity(0.7), lineWidth: 1)
-                                    }
-                                    .accessibilityLabel("\(venue.name), \(venue.type)")
+                                Button {
+                                    selectedVenue = venue
+                                } label: {
+                                    Image(systemName: "gamecontroller.fill")
+                                        .font(.system(size: 16, weight: .bold))
+                                        .foregroundStyle(LeagueTheme.background)
+                                        .frame(width: 46, height: 46)
+                                        .background(LeagueTheme.gold, in: Circle())
+                                        .overlay {
+                                            Circle()
+                                                .strokeBorder(LeagueTheme.text.opacity(0.65), lineWidth: 1)
+                                        }
+                                        .shadow(color: .black.opacity(0.2), radius: 5)
+                                }
+                                .buttonStyle(.plain)
+                                .accessibilityLabel("Détails de \(venue.name), \(venue.type)")
                             }
-                            .tag(venue.id)
                         }
                     }
-                    .accessibilityLabel("Carte des lieux e-sport")
+                    .accessibilityLabel("Carte interactive des lieux e-sport")
 
-                    if let venue = selectedVenue {
-                        venuePanel(venue)
-                            .padding(.horizontal, LeagueTheme.Space.md)
-                            .padding(.bottom, LeagueTheme.Space.sm)
-                            .transition(reduceMotion ? .opacity : .move(edge: .bottom).combined(with: .opacity))
+                    if locationManager.isLocating {
+                        ProgressView()
+                            .tint(LeagueTheme.gold)
+                            .padding(LeagueTheme.Space.md)
+                            .background(LeagueTheme.surface, in: Circle())
+                            .padding(LeagueTheme.Space.md)
+                            .accessibilityLabel("Localisation en cours")
                     }
                 }
-                .animation(reduceMotion ? nil : .easeOut(duration: 0.22), value: selectedVenueID)
             }
-            .navigationTitle("Lieux E-sport")
-            .onChange(of: selectedVenueID) { newSelection in
-                if newSelection != nil {
-                    UISelectionFeedbackGenerator().selectionChanged()
+            .background(LeagueTheme.background)
+            .navigationTitle("Lieux e-sport")
+            .navigationBarTitleDisplayMode(.inline)
+            .toolbar {
+                ToolbarItem(placement: .topBarTrailing) {
+                    Button { addingVenue = true } label: {
+                        Image(systemName: "plus")
+                    }
+                    .accessibilityLabel("Proposer un nouveau lieu")
                 }
+            }
+            .sheet(item: $selectedVenue) { venue in
+                VenueDetailView(venue: venue, userCoordinate: locationManager.userLocation)
+            }
+            .sheet(isPresented: $addingVenue) {
+                AddVenueView(viewModel: viewModel)
             }
             .onAppear { locationManager.requestLocation() }
         }
     }
 
-    private func venuePanel(_ venue: DBVenue) -> some View {
-        VStack(alignment: .leading, spacing: LeagueTheme.Space.md) {
-            HStack(alignment: .top) {
-                VStack(alignment: .leading, spacing: LeagueTheme.Space.xs) {
-                    Text(venue.type)
-                        .font(.caption.weight(.bold))
-                        .foregroundStyle(LeagueTheme.cyan)
-                    Text(venue.name)
-                        .font(.title3.weight(.bold))
-                        .foregroundStyle(LeagueTheme.text)
-                    Text(venue.address)
-                        .font(.subheadline)
-                        .foregroundStyle(LeagueTheme.muted)
-                        .fixedSize(horizontal: false, vertical: true)
-                }
-                Spacer(minLength: LeagueTheme.Space.xs)
-                Button { selectedVenueID = nil } label: {
-                    Image(systemName: "xmark.circle.fill")
-                        .font(.title2)
-                        .foregroundStyle(LeagueTheme.muted)
-                        .frame(width: 44, height: 44)
-                }
-                .accessibilityLabel("Fermer la fiche du lieu")
-            }
-
-            if let userLoc = locationManager.userLocation {
-                let target = CLLocation(latitude: venue.latitude, longitude: venue.longitude)
-                let origin = CLLocation(latitude: userLoc.latitude, longitude: userLoc.longitude)
-                let kilometers = origin.distance(from: target) / 1000
-
-                Label(String(format: "À %.1f km de votre position", kilometers),
-                      systemImage: "location")
-                    .font(.subheadline.weight(.medium))
-                    .foregroundStyle(LeagueTheme.text)
-            }
-
-            Button {
-                // Itinéraire Apple Plans préservé.
-                let address = "http://maps.apple.com/?daddr=\(venue.latitude),\(venue.longitude)"
-                if let url = URL(string: address) { openURL(url) }
-            } label: {
-                Label("S'y rendre (Ouvrir Plans)", systemImage: "car.fill")
-            }
-            .buttonStyle(LeagueActionButtonStyle())
-        }
-        .padding(LeagueTheme.Space.md)
-        .leagueSurface(radius: LeagueTheme.Corner.panel)
-        .shadow(color: .black.opacity(0.3), radius: 12, y: 5)
-    }
-
     private func focus(on venue: DBVenue) {
-        selectedVenueID = venue.id
-        withAnimation(reduceMotion ? nil : .easeOut(duration: 0.25)) {
+        withAnimation(reduceMotion ? nil : LeagueMotion.standard) {
             cameraPosition = .region(
                 MKCoordinateRegion(
                     center: venue.coordinate,
-                    span: MKCoordinateSpan(latitudeDelta: 0.09, longitudeDelta: 0.09)
+                    span: MKCoordinateSpan(latitudeDelta: 0.07, longitudeDelta: 0.07)
                 )
             )
         }
+        selectedVenue = venue
     }
 
-    private func recenterOnUser() {
-        guard let user = locationManager.userLocation else { return }
-        withAnimation(reduceMotion ? nil : .easeOut(duration: 0.25)) {
+    private func focusOnUser() {
+        guard let coordinate = locationManager.userLocation else {
+            locationManager.requestLocation()
+            return
+        }
+        withAnimation(reduceMotion ? nil : LeagueMotion.standard) {
             cameraPosition = .region(
                 MKCoordinateRegion(
-                    center: user,
+                    center: coordinate,
                     span: MKCoordinateSpan(latitudeDelta: 0.08, longitudeDelta: 0.08)
                 )
             )

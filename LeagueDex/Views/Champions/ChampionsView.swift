@@ -1,174 +1,194 @@
 import SwiftUI
 
+/// Single-scroll explorer. Keeping the header, filters and cards in one scroll
+/// avoids overlapping fixed bars on compact iPhones and at large text sizes.
 struct ChampionsView: View {
     @StateObject private var viewModel = ChampionViewModel()
+
     @State private var searchText = ""
     @State private var selectedRole = "Tous"
     @State private var showOnlyFavorites = false
     @State private var sortDescending = false
-
     @State private var randomChampion: DBChampion?
-    @State private var isNavigatingFromShake = false
-    @State private var isDrawing = false
+    @State private var presentingARAM = false
+
     @Environment(\.accessibilityReduceMotion) private var reduceMotion
 
-    private let haptic = UIImpactFeedbackGenerator(style: .heavy)
     private let roles = [
-        ("Tous", "Tous"), ("Assassin", "Assassin"), ("Combattant", "Fighter"),
-        ("Mage", "Mage"), ("Tireur", "Marksman"), ("Support", "Support"), ("Tank", "Tank")
+        ("Tous", "Tous"), ("Assassin", "Assassin"),
+        ("Combattant", "Fighter"), ("Mage", "Mage"),
+        ("Tireur", "Marksman"), ("Support", "Support"), ("Tank", "Tank")
     ]
-    private let gridColumns = [GridItem(.adaptive(minimum: 148, maximum: 240), spacing: 12)]
+    private let gridColumns = [
+        GridItem(.adaptive(minimum: 142, maximum: 250), spacing: LeagueTheme.Space.md)
+    ]
 
     private var filteredChampions: [DBChampion] {
         let matches = viewModel.champions.filter { champion in
-            let matchesSearch = searchText.isEmpty
+            let isSearchMatch = searchText.isEmpty
                 || champion.name.localizedStandardContains(searchText)
-            let matchesRole = selectedRole == "Tous" || champion.tags.contains(selectedRole)
-            let matchesFavorite = !showOnlyFavorites || champion.isFavorite
-            return matchesSearch && matchesRole && matchesFavorite
+            let isRoleMatch = selectedRole == "Tous" || champion.tags.contains(selectedRole)
+            let isFavoriteMatch = !showOnlyFavorites || champion.isFavorite
+            return isSearchMatch && isRoleMatch && isFavoriteMatch
         }
         return matches.sorted {
-            let order = $0.name.localizedStandardCompare($1.name)
-            return sortDescending ? order == .orderedDescending : order == .orderedAscending
+            let result = $0.name.localizedStandardCompare($1.name)
+            return sortDescending ? result == .orderedDescending : result == .orderedAscending
         }
     }
 
-    private var hasActiveFilters: Bool {
-        selectedRole != "Tous" || showOnlyFavorites || !searchText.isEmpty
+    private var filtering: Bool {
+        !searchText.isEmpty || selectedRole != "Tous" || showOnlyFavorites
     }
 
     var body: some View {
-        let visibleChampions = filteredChampions
+        let results = filteredChampions
+
         NavigationStack {
-            VStack(spacing: 0) {
-                ScrollView(.horizontal, showsIndicators: false) {
+            ScrollView {
+                LazyVStack(alignment: .leading, spacing: LeagueTheme.Space.lg) {
+                    aramFeature
+                    rolesRow
+
                     HStack(spacing: LeagueTheme.Space.sm) {
-                        ForEach(roles, id: \.1) { title, tag in
-                            LeagueFilterChip(title: title, isSelected: selectedRole == tag) {
-                                haptic.impactOccurred(intensity: 0.5)
-                                withAnimation(reduceMotion ? nil : .easeOut(duration: LeagueTheme.pressDuration)) {
-                                    selectedRole = tag
-                                }
-                            }
+                        VStack(alignment: .leading, spacing: 4) {
+                            Text("Collection")
+                                .font(.title3.weight(.bold))
+                                .foregroundStyle(LeagueTheme.text)
+                            Text("\(results.count) champions")
+                                .font(.subheadline)
+                                .foregroundStyle(LeagueTheme.muted)
                         }
+                        Spacer(minLength: LeagueTheme.Space.xs)
+                        Menu {
+                            Button("Nom A à Z") { sortDescending = false }
+                            Button("Nom Z à A") { sortDescending = true }
+                        } label: {
+                            Label("Trier", systemImage: "arrow.up.arrow.down")
+                                .font(.subheadline.weight(.semibold))
+                                .foregroundStyle(LeagueTheme.gold)
+                                .frame(minHeight: 44)
+                        }
+                        .accessibilityValue(sortDescending ? "Nom Z à A" : "Nom A à Z")
                     }
-                    .padding(.horizontal, LeagueTheme.Space.md)
-                    .padding(.vertical, LeagueTheme.Space.sm)
-                }
-                .background(LeagueTheme.surface)
-                .overlay(alignment: .bottom) {
-                    LeagueTheme.border.frame(height: 1)
-                }
 
-                HStack(spacing: LeagueTheme.Space.sm) {
-                    VStack(alignment: .leading, spacing: LeagueTheme.Space.xs) {
-                        Text("Champions")
-                            .font(.headline)
-                            .foregroundStyle(LeagueTheme.text)
-                        Text("\(visibleChampions.count) résultat(s)")
-                            .font(.caption)
-                            .foregroundStyle(LeagueTheme.muted)
-                    }
-                    Spacer(minLength: 4)
-                    Menu {
-                        Button("Nom : A à Z") { sortDescending = false }
-                        Button("Nom : Z à A") { sortDescending = true }
-                    } label: {
-                        Label("Trier", systemImage: "arrow.up.arrow.down")
-                            .font(.subheadline.weight(.semibold))
-                            .foregroundStyle(LeagueTheme.gold)
-                            .frame(minHeight: 44)
-                    }
-                    .accessibilityLabel("Trier les champions")
-                    .accessibilityValue(sortDescending ? "Nom Z à A" : "Nom A à Z")
-
-                    Button(action: selectRandomChampion) {
-                        Label(isDrawing ? "Tirage…" : "ARAM", systemImage: "dice.fill")
-                            .font(.subheadline.weight(.bold))
-                            .padding(.horizontal, LeagueTheme.Space.md)
-                            .frame(minHeight: 44)
-                            .foregroundStyle(LeagueTheme.background)
-                            .background(LeagueTheme.gold, in: Capsule())
-                    }
-                    .buttonStyle(LeagueCompactButtonStyle())
-                    .disabled(visibleChampions.isEmpty || isDrawing)
-                    .accessibilityHint("Tire au sort un champion parmi les résultats")
-                }
-                .padding(.horizontal, LeagueTheme.Space.md)
-                .padding(.vertical, LeagueTheme.Space.sm)
-
-                ScrollView {
                     if let message = viewModel.errorMessage, viewModel.champions.isEmpty {
-                        LeagueErrorState(message: message) { viewModel.fetchChampionsFromFirebase() }
-                            .padding(.top, LeagueTheme.Space.lg)
-                            .leagueReveal()
+                        LeagueErrorState(message: message) {
+                            viewModel.fetchChampionsFromFirebase()
+                        }
                     } else if viewModel.isLoading && viewModel.champions.isEmpty {
                         LeagueChampionGridSkeleton()
-                            .leagueReveal()
-                    } else if visibleChampions.isEmpty {
-                        VStack(spacing: LeagueTheme.Space.sm) {
+                    } else if results.isEmpty {
+                        VStack(spacing: LeagueTheme.Space.md) {
                             LeagueEmptyState(
                                 title: "Aucun champion trouvé",
-                                detail: "Essayez un autre nom ou modifiez les filtres."
+                                detail: filtering
+                                    ? "Essayez un autre filtre ou un autre nom."
+                                    : "Le catalogue est vide. Réessayez la synchronisation."
                             )
-                            if hasActiveFilters {
-                                Button("Effacer les filtres", action: resetFilters)
-                                    .buttonStyle(LeagueActionButtonStyle(prominent: false))
-                                    .padding(.horizontal, LeagueTheme.Space.lg)
+                            Button(filtering ? "Effacer les filtres" : "Recharger les champions") {
+                                if filtering {
+                                    resetFilters()
+                                } else {
+                                    viewModel.fetchChampionsFromFirebase()
+                                }
                             }
+                            .buttonStyle(LeagueActionButtonStyle(prominent: false))
                         }
-                        .padding(.top, 48)
-                        .leagueReveal()
                     } else {
                         LazyVGrid(columns: gridColumns, spacing: LeagueTheme.Space.md) {
-                            ForEach(visibleChampions) { champion in
-                                NavigationLink(destination: ChampionDetailView(champion: champion, viewModel: viewModel)) {
+                            ForEach(results) { champion in
+                                NavigationLink {
+                                    ChampionDetailView(champion: champion, viewModel: viewModel)
+                                } label: {
                                     ChampionCard(champion: champion)
                                 }
                                 .buttonStyle(LeagueCompactButtonStyle())
-                                .accessibilityHint("Ouvrir la fiche de ce champion")
+                                .accessibilityHint("Ouvrir la fiche de \(champion.name)")
                             }
                         }
-                        .padding(LeagueTheme.Space.md)
                     }
                 }
+                .padding(.horizontal, LeagueTheme.Space.md)
+                .padding(.top, LeagueTheme.Space.md)
+                .padding(.bottom, LeagueTheme.Space.xl)
             }
             .background(LeagueTheme.background)
-            .navigationTitle("LeagueDex")
-            .searchable(text: $searchText, prompt: "Rechercher un champion...")
+            .navigationTitle("Champions")
+            .navigationBarTitleDisplayMode(.inline)
+            .searchable(text: $searchText, prompt: "Rechercher un champion")
             .toolbar {
-                ToolbarItem(placement: .navigationBarTrailing) {
-                    Button(action: selectRandomChampion) {
-                        Image(systemName: "dice.fill")
-                            .foregroundStyle(LeagueTheme.gold)
-                    }
-                    .disabled(visibleChampions.isEmpty || isDrawing)
-                    .accessibilityLabel("Champion aléatoire ARAM")
-                }
-                ToolbarItem(placement: .navigationBarTrailing) {
+                ToolbarItem(placement: .topBarTrailing) {
                     Button {
-                        haptic.impactOccurred(intensity: 0.5)
-                        withAnimation(reduceMotion ? nil : .easeOut(duration: LeagueTheme.pressDuration)) {
+                        withAnimation(reduceMotion ? nil : LeagueMotion.quick) {
                             showOnlyFavorites.toggle()
                         }
                     } label: {
                         Image(systemName: showOnlyFavorites ? "heart.fill" : "heart")
                             .foregroundStyle(showOnlyFavorites ? LeagueTheme.danger : LeagueTheme.gold)
                     }
-                    .accessibilityLabel(showOnlyFavorites ? "Afficher tous les champions" : "Afficher les favoris")
+                    .accessibilityLabel(
+                        showOnlyFavorites ? "Afficher tous les champions" : "Afficher les favoris"
+                    )
                 }
             }
-            .background(
-                NavigationLink(
-                    destination: Group {
-                        if let champion = randomChampion {
-                            ChampionDetailView(champion: champion, viewModel: viewModel)
+            .navigationDestination(isPresented: $presentingARAM) {
+                if let randomChampion {
+                    ChampionDetailView(champion: randomChampion, viewModel: viewModel)
+                }
+            }
+            .onShake { selectARAM() }
+        }
+    }
+
+    private var aramFeature: some View {
+        VStack(alignment: .leading, spacing: LeagueTheme.Space.md) {
+            HStack(alignment: .top, spacing: LeagueTheme.Space.md) {
+                Image(systemName: "dice.fill")
+                    .font(.title2)
+                    .foregroundStyle(LeagueTheme.gold)
+                    .frame(width: 42, height: 42)
+                    .background(LeagueTheme.elevated, in: RoundedRectangle(cornerRadius: 12))
+                    .accessibilityHidden(true)
+
+                VStack(alignment: .leading, spacing: 4) {
+                    Text("Mode ARAM")
+                        .font(.headline.weight(.bold))
+                        .foregroundStyle(LeagueTheme.text)
+                    Text("Un champion aléatoire parmi vos filtres. Secouez aussi l'iPhone !")
+                        .font(.subheadline)
+                        .foregroundStyle(LeagueTheme.muted)
+                        .fixedSize(horizontal: false, vertical: true)
+                }
+            }
+
+            Button(action: selectARAM) {
+                Label("Tirer un champion", systemImage: "shuffle")
+            }
+            .buttonStyle(LeagueActionButtonStyle())
+            .disabled(filteredChampions.isEmpty || presentingARAM)
+            .accessibilityHint("Ouvre la fiche d'un champion choisi au hasard")
+        }
+        .padding(LeagueTheme.Space.md)
+        .leagueSurface(radius: LeagueTheme.Corner.panel)
+    }
+
+    private var rolesRow: some View {
+        VStack(alignment: .leading, spacing: LeagueTheme.Space.sm) {
+            Text("Rôles")
+                .font(.caption.weight(.semibold))
+                .foregroundStyle(LeagueTheme.muted)
+            ScrollView(.horizontal, showsIndicators: false) {
+                HStack(spacing: LeagueTheme.Space.sm) {
+                    ForEach(roles, id: \.1) { title, tag in
+                        LeagueFilterChip(title: title, isSelected: selectedRole == tag) {
+                            withAnimation(reduceMotion ? nil : LeagueMotion.quick) {
+                                selectedRole = tag
+                            }
                         }
-                    },
-                    isActive: $isNavigatingFromShake
-                ) { EmptyView() }
-            )
-            .onShake { selectRandomChampion() }
+                    }
+                }
+            }
         }
     }
 
@@ -178,16 +198,12 @@ struct ChampionsView: View {
         showOnlyFavorites = false
     }
 
-    private func selectRandomChampion() {
-        guard !isDrawing, !isNavigatingFromShake,
+    private func selectARAM() {
+        guard !presentingARAM,
               let chosen = filteredChampions.randomElement() else { return }
-        isDrawing = true
-        haptic.impactOccurred(intensity: 1.0)
+        UIImpactFeedbackGenerator(style: .medium).impactOccurred()
         randomChampion = chosen
-        Task {
-            await viewModel.loadDetails(for: chosen)
-            isNavigatingFromShake = true
-            isDrawing = false
-        }
+        presentingARAM = true
+        // Destination loads its own details without delaying navigation.
     }
 }
