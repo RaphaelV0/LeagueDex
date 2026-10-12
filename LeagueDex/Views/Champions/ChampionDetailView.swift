@@ -19,8 +19,6 @@ struct ChampionDetailView: View {
     @State private var selectedLevel: Double = 1
     @State private var selectedSpellTitle = ""
     @State private var selectedSpellDesc = ""
-    @State private var nextARAMChampion: DBChampion?
-    @State private var showingNextARAM = false
     @Environment(\.accessibilityReduceMotion) private var reduceMotion
 
     private let hapticFeedback = UIImpactFeedbackGenerator(style: .medium)
@@ -35,12 +33,11 @@ struct ChampionDetailView: View {
 
                     VStack(alignment: .leading, spacing: LeagueTheme.Space.lg) {
                         identity
-                        Button(action: rerollARAM) {
-                            Label("Relancer un champion ARAM", systemImage: "dice.fill")
-                        }
-                        .buttonStyle(LeagueActionButtonStyle(prominent: false))
-                        .disabled(viewModel.champions.isEmpty || showingNextARAM)
-                        .accessibilityHint("Choisit un autre champion et ouvre sa fiche")
+                        Label("Secouez l’iPhone pour changer de champion ARAM",
+                              systemImage: "dice.fill")
+                            .font(.footnote)
+                            .foregroundStyle(LeagueTheme.muted)
+                            .accessibilityAddTraits(.isStaticText)
                         sectionShortcuts(proxy: scrollProxy)
                             .leagueReveal()
 
@@ -86,20 +83,7 @@ struct ChampionDetailView: View {
         .id(champion.id)
         .edgesIgnoringSafeArea(.top)
         .navigationBarTitleDisplayMode(.inline)
-        .navigationDestination(isPresented: $showingNextARAM) {
-            if let nextARAMChampion {
-                ChampionDetailView(champion: nextARAMChampion, viewModel: viewModel)
-            }
-        }
         .toolbar {
-            ToolbarItem(placement: .topBarTrailing) {
-                Button(action: rerollARAM) {
-                    Image(systemName: "dice.fill")
-                        .foregroundStyle(LeagueTheme.gold)
-                }
-                .disabled(viewModel.champions.isEmpty || showingNextARAM)
-                .accessibilityLabel("Mode ARAM : autre champion")
-            }
             ToolbarItem(placement: .navigationBarTrailing) {
                 Button {
                     hapticFeedback.impactOccurred()
@@ -393,15 +377,4 @@ struct ChampionDetailView: View {
         selectedSpellTitle = "Passif : \(champion.passiveName)"
         selectedSpellDesc = champion.passiveDesc.removingHTML()
     }
-    private func rerollARAM() {
-        guard !showingNextARAM else { return }
-        let others = viewModel.champions.filter { $0.id != champion.id }
-        guard let chosen = (others.isEmpty ? viewModel.champions : others).randomElement() else {
-            return
-        }
-        hapticFeedback.impactOccurred(intensity: 0.7)
-        nextARAMChampion = chosen
-        showingNextARAM = true
-    }
-
 }
