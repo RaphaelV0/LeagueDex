@@ -13,23 +13,13 @@ struct ItemsView: View {
         NavigationStack {
             Group {
                 if let message = viewModel.errorMessage, viewModel.items.isEmpty {
-                    VStack(spacing: LeagueTheme.Space.md) {
-                        ContentUnavailableView(
-                            message,
-                            systemImage: "wifi.exclamationmark",
-                            description: Text("Vérifiez votre connexion puis réessayez.")
-                        )
-                        Button("Réessayer") { viewModel.fetchItemsFromFirebase() }
-                            .buttonStyle(LeagueActionButtonStyle())
-                            .padding(.horizontal, LeagueTheme.Space.lg)
-                    }
+                    LeagueErrorState(message: message) { viewModel.fetchItemsFromFirebase() }
                 } else if viewModel.isLoading && viewModel.items.isEmpty {
                     LeagueLoadingState(message: "Chargement de l'armurerie...")
                 } else if filteredItems.isEmpty {
-                    ContentUnavailableView(
-                        "Aucun objet trouvé",
-                        systemImage: "magnifyingglass",
-                        description: Text("Essayez un autre nom d'objet.")
+                    LeagueEmptyState(
+                        title: "Aucun objet trouvé",
+                        detail: "Essayez un autre nom d'objet."
                     )
                 } else {
                     List(filteredItems) { item in
