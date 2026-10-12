@@ -106,7 +106,9 @@ struct ChampionDetailView: View {
             ZStack(alignment: .bottomLeading) {
                 CachedAsyncImage(url: champion.splashArtURL) { image in
                     image.resizable().scaledToFill()
-                } placeholder: { LeagueTheme.elevated }
+                } placeholder: {
+                    LeagueSkeletonBlock(radius: LeagueTheme.Corner.large)
+                }
                     .frame(width: geometry.size.width, height: 320 + stretch)
                     .clipped()
                     .offset(y: -stretch)
