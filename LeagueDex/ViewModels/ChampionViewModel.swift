@@ -14,6 +14,9 @@ import Combine
 class ChampionViewModel: ObservableObject {
     @Published var champions: [DBChampion] = []
     @Published var isLoading = false
+    @Published var errorMessage: String?
+    private var loadingDetails = Set<String>()
+    private var isImporting = false
     
     private let db = Firestore.firestore()
     private var listenerRegistration: ListenerRegistration?
@@ -28,24 +31,37 @@ class ChampionViewModel: ObservableObject {
     
     // 1. Écoute Firebase en temps réel
     func fetchChampionsFromFirebase() {
+        listenerRegistration?.remove()
+        errorMessage = nil
         isLoading = true
         listenerRegistration = db.collection("champions").addSnapshotListener { [weak self] snapshot, error in
             guard let self = self else { return }
             
             if let error = error {
                 print("Erreur Firestore: \(error.localizedDescription)")
+                self.errorMessage = "Impossible de charger les champions. Vérifiez votre connexion."
                 self.isLoading = false
                 return
             }
             
-            guard let documents = snapshot?.documents else { return }
+            guard let documents = snapshot?.documents else {
+                self.errorMessage = "Aucune réponse de la base de données."
+                self.isLoading = false
+                return
+            }
             
-            self.champions = documents.compactMap { try? $0.data(as: DBChampion.self) }
+            var fetched = documents.compactMap { try? $0.data(as: DBChampion.self) }
+            FavoritesStore.shared.migrateIfNeeded(fetched)
+            for index in fetched.indices {
+                fetched[index].isFavorite = FavoritesStore.shared.isFavorite(fetched[index].id)
+            }
+            self.champions = fetched
+            self.errorMessage = nil
             self.champions.sort { $0.name < $1.name }
             self.isLoading = false
             
             // Si la base cloud est vide, on télécharge depuis Riot
-            if self.champions.isEmpty {
+            if self.champions.isEmpty && !self.isImporting {
                 Task { await self.syncChampionsFromRiot() }
             }
         }
@@ -53,7 +69,10 @@ class ChampionViewModel: ObservableObject {
     
     // 2. Télécharge depuis Riot et pousse sur Firebase
     private func syncChampionsFromRiot() async {
-        guard let url = URL(string: "https://ddragon.leagueoflegends.com/cdn/14.18.1/data/fr_FR/champion.json") else { return }
+        guard let url = DataDragon.catalogURL("champion.json") else { return }
+        guard !isImporting else { return }
+        isImporting = true
+        defer { isImporting = false }
         
         do {
             let (data, _) = try await URLSession.shared.data(from: url)
@@ -76,14 +95,17 @@ class ChampionViewModel: ObservableObject {
             try await batch.commit()
             print("Importation Riot -> Firebase (Champions) terminée avec succès.")
         } catch {
+            errorMessage = "Importation des champions impossible. Réessayez plus tard."
             print("Erreur d'importation : \(error)")
         }
     }
     
     // 3. Charge les détails du champion (Sorts, Skins) et met à jour Firebase
     func loadDetails(for champion: DBChampion) async {
-        if champion.isDetailLoaded { return }
-        guard let url = URL(string: "https://ddragon.leagueoflegends.com/cdn/14.18.1/data/fr_FR/champion/\(champion.id).json") else { return }
+        if champion.isDetailLoaded || loadingDetails.contains(champion.id) { return }
+        loadingDetails.insert(champion.id)
+        defer { loadingDetails.remove(champion.id) }
+        guard let url = DataDragon.catalogURL("champion/\(champion.id).json") else { return }
         
         do {
             let (data, _) = try await URLSession.shared.data(from: url)
@@ -101,17 +123,28 @@ class ChampionViewModel: ObservableObject {
                 updatedChamp.fullLore = details.lore
                 updatedChamp.isDetailLoaded = true
                 
-                try db.collection("champions").document(champion.id).setData(from: updatedChamp)
+                try await db.collection("champions").document(champion.id).updateData([
+                    "allyTips": updatedChamp.allyTips,
+                    "enemyTips": updatedChamp.enemyTips,
+                    "skins": updatedChamp.skins.map { ["name": $0.name, "num": $0.num, "championId": $0.championId] as [String: Any] },
+                    "spells": updatedChamp.spells.map { ["id": $0.id, "name": $0.name, "desc": $0.desc] },
+                    "passiveName": updatedChamp.passiveName,
+                    "passiveDesc": updatedChamp.passiveDesc,
+                    "passiveImage": updatedChamp.passiveImage,
+                    "fullLore": updatedChamp.fullLore,
+                    "isDetailLoaded": true
+                ])
             }
         } catch {
             print("Erreur de chargement des détails : \(error)")
         }
     }
     
-    // 4. Modifie les favoris dans le cloud
+    // 4. Modifie uniquement les favoris locaux
     func toggleFavorite(for champion: DBChampion) {
-        var updatedChamp = champion
-        updatedChamp.isFavorite.toggle()
-        try? db.collection("champions").document(champion.id).setData(from: updatedChamp)
+        FavoritesStore.shared.toggle(champion.id)
+        if let index = champions.firstIndex(where: { $0.id == champion.id }) {
+            champions[index].isFavorite = FavoritesStore.shared.isFavorite(champion.id)
+        }
     }
 }

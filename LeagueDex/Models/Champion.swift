@@ -33,7 +33,7 @@ struct DBChampion: Codable, Identifiable, Hashable {
     var isFavorite: Bool = false
     
     // Propriétés calculées (Images)
-    var iconURL: URL? { URL(string: "https://ddragon.leagueoflegends.com/cdn/14.18.1/img/champion/\(id).png") }
+    var iconURL: URL? { URL(string: "https://ddragon.leagueoflegends.com/cdn/\(DataDragon.version)/img/champion/\(id).png") }
     var splashArtURL: URL? { URL(string: "https://ddragon.leagueoflegends.com/cdn/img/champion/splash/\(id)_0.jpg") }
     
     // Fonction mathématique intégrée au modèle
@@ -57,7 +57,7 @@ struct DBSpell: Codable, Identifiable, Hashable {
     let id: String
     let name: String
     let desc: String
-    var url: URL? { URL(string: "https://ddragon.leagueoflegends.com/cdn/14.18.1/img/spell/\(id).png") }
+    var url: URL? { URL(string: "https://ddragon.leagueoflegends.com/cdn/\(DataDragon.version)/img/spell/\(id).png") }
 }
 
 // MARK: - 2. MODÈLES API (RIOT GAMES)

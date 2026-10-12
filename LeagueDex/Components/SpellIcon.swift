@@ -1,54 +1,85 @@
-//
-//  SpellIcon.swift
-//  LeagueDex
-//
-//  Created by Etudiant on 17/09/2026.
-//
-
-
 import SwiftUI
 
 struct SpellIcon: View {
     let url: URL?
+    @ScaledMetric(relativeTo: .body) private var scaledSize: CGFloat = 50
+
     var body: some View {
         CachedAsyncImage(url: url) { image in
             image.resizable().scaledToFit()
         } placeholder: {
-            Color.gray.opacity(0.3)
+            LeagueTheme.elevated
+                .overlay { Image(systemName: "sparkles").foregroundStyle(LeagueTheme.muted) }
         }
-        .frame(width: 50, height: 50)
-        .clipShape(RoundedRectangle(cornerRadius: 12))
-        .shadow(color: .black.opacity(0.1), radius: 3, y: 2)
+        .imageDimension(80)
+        .frame(width: min(76, max(50, scaledSize)), height: min(76, max(50, scaledSize)))
+        .clipShape(RoundedRectangle(cornerRadius: LeagueTheme.Corner.medium))
+        .overlay {
+            RoundedRectangle(cornerRadius: LeagueTheme.Corner.medium)
+                .strokeBorder(LeagueTheme.border, lineWidth: 1)
+        }
     }
 }
 
 struct RealStatCard: View {
-    let title: String; let icon: String; let color: Color; let value: Double
+    let title: String
+    let icon: String
+    let color: Color
+    let value: Double
+    @Environment(\.accessibilityReduceMotion) private var reduceMotion
+
     var body: some View {
-        HStack {
-            Image(systemName: icon).foregroundColor(color).frame(width: 24)
-            VStack(alignment: .leading) {
-                Text(title).font(.caption).foregroundColor(.secondary)
-                Text(String(format: "%.1f", value)).font(.headline)
+        HStack(spacing: LeagueTheme.Space.sm) {
+            Image(systemName: icon)
+                .foregroundStyle(color)
+                .frame(width: 25)
+
+            VStack(alignment: .leading, spacing: LeagueTheme.Space.xs) {
+                Text(title)
+                    .font(.caption)
+                    .foregroundStyle(LeagueTheme.muted)
+                    .fixedSize(horizontal: false, vertical: true)
+
+                Text(value.formatted(.number.precision(.fractionLength(1))))
+                    .font(.headline.monospacedDigit())
+                    .foregroundStyle(LeagueTheme.text)
+                    .contentTransition(.numericText())
+                    .animation(reduceMotion ? nil : LeagueMotion.quick, value: value)
             }
-            Spacer()
+            Spacer(minLength: 0)
         }
-        .padding(12)
-        .background(Color(.systemBackground).opacity(0.6))
-        .cornerRadius(12)
+        .padding(LeagueTheme.Space.md)
+        .frame(maxWidth: .infinity, alignment: .leading)
+        .leagueSurface(radius: LeagueTheme.Corner.medium)
+        .accessibilityElement(children: .combine)
     }
 }
 
 struct PriceBox: View {
-    let title: String; let price: Int
+    let title: String
+    let price: Int
+
     var body: some View {
-        VStack {
-            Text(title).font(.caption).foregroundColor(.secondary)
-            HStack(spacing: 4) {
-                Text("\(price)").font(.headline)
-                Image(systemName: "circle.hexagongrid.fill").foregroundColor(.yellow)
+        VStack(spacing: LeagueTheme.Space.sm) {
+            Text(title)
+                .font(.caption)
+                .foregroundStyle(LeagueTheme.muted)
+                .multilineTextAlignment(.center)
+                .fixedSize(horizontal: false, vertical: true)
+
+            HStack(spacing: LeagueTheme.Space.xs) {
+                Text(price.formatted())
+                    .font(.headline.monospacedDigit())
+                    .foregroundStyle(LeagueTheme.text)
+                Image(systemName: "circle.hexagongrid.fill")
+                    .foregroundStyle(LeagueTheme.gold)
+                    .font(.caption)
             }
         }
-        .padding(10).background(Color(.systemGray6)).cornerRadius(10)
+        .frame(maxWidth: .infinity)
+        .padding(LeagueTheme.Space.sm)
+        .frame(minHeight: 86)
+        .leagueSurface(radius: LeagueTheme.Corner.medium)
+        .accessibilityElement(children: .combine)
     }
 }

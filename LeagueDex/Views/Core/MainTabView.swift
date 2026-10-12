@@ -12,7 +12,7 @@ struct MainTabView: View {
             // 2ème Onglet : Objets / Armurerie
             ItemsView()
                 .tabItem {
-                    Label("Objets", systemImage: "shield.fill")
+                    Label("Objets", systemImage: "shield.lefthalf.filled")
                 }
             
             // 3ème Onglet : Carte des Lieux E-sport & LAN (NOUVEAU)
@@ -21,5 +21,9 @@ struct MainTabView: View {
                     Label("Lieux", systemImage: "map.fill")
                 }
         }
+        .tint(LeagueTheme.gold)
+        .toolbarBackground(LeagueTheme.surface, for: .tabBar)
+        .toolbarBackground(.visible, for: .tabBar)
+        .preferredColorScheme(.dark)
     }
 }
