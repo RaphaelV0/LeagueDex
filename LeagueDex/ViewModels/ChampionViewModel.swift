@@ -31,6 +31,8 @@ class ChampionViewModel: ObservableObject {
     
     // 1. Écoute Firebase en temps réel
     func fetchChampionsFromFirebase() {
+        listenerRegistration?.remove()
+        errorMessage = nil
         isLoading = true
         listenerRegistration = db.collection("champions").addSnapshotListener { [weak self] snapshot, error in
             guard let self = self else { return }
@@ -138,7 +140,7 @@ class ChampionViewModel: ObservableObject {
         }
     }
     
-    // 4. Modifie les favoris dans le cloud
+    // 4. Modifie uniquement les favoris locaux
     func toggleFavorite(for champion: DBChampion) {
         FavoritesStore.shared.toggle(champion.id)
         if let index = champions.firstIndex(where: { $0.id == champion.id }) {
