@@ -1,16 +1,17 @@
 import SwiftUI
 
-/// Single-scroll explorer. Keeping the header, filters and cards in one scroll
-/// avoids overlapping fixed bars on compact iPhones and at large text sizes.
+/// A single navigation path owns all champion destinations, including ARAM.
+/// One shake observer avoids duplicate draws when detail views are stacked.
 struct ChampionsView: View {
+    var isActive: Bool = true
     @StateObject private var viewModel = ChampionViewModel()
 
     @State private var searchText = ""
     @State private var selectedRole = "Tous"
     @State private var showOnlyFavorites = false
     @State private var sortDescending = false
-    @State private var randomChampion: DBChampion?
-    @State private var presentingARAM = false
+    @State private var navigationPath: [String] = []
+    @State private var lastShakeAt: Date = .distantPast
 
     @Environment(\.accessibilityReduceMotion) private var reduceMotion
 
@@ -44,7 +45,7 @@ struct ChampionsView: View {
     var body: some View {
         let results = filteredChampions
 
-        NavigationStack {
+        NavigationStack(path: $navigationPath) {
             ScrollView {
                 LazyVStack(alignment: .leading, spacing: LeagueTheme.Space.lg) {
                     aramFeature
@@ -98,9 +99,7 @@ struct ChampionsView: View {
                     } else {
                         LazyVGrid(columns: gridColumns, spacing: LeagueTheme.Space.md) {
                             ForEach(results) { champion in
-                                NavigationLink {
-                                    ChampionDetailView(champion: champion, viewModel: viewModel)
-                                } label: {
+                                NavigationLink(value: champion.id) {
                                     ChampionCard(champion: champion)
                                 }
                                 .buttonStyle(LeagueCompactButtonStyle())
@@ -132,44 +131,42 @@ struct ChampionsView: View {
                     )
                 }
             }
-            .navigationDestination(isPresented: $presentingARAM) {
-                if let randomChampion {
-                    ChampionDetailView(champion: randomChampion, viewModel: viewModel)
+            .navigationDestination(for: String.self) { championID in
+                if let champion = viewModel.champions.first(where: { $0.id == championID }) {
+                    ChampionDetailView(champion: champion, viewModel: viewModel)
+                } else {
+                    ContentUnavailableView("Champion introuvable",
+                                           systemImage: "person.crop.circle.badge.questionmark")
                 }
             }
-            .onShake { selectARAM() }
+        }
+        .onShake {
+            guard isActive else { return }
+            drawARAMFromCurrentPage()
         }
     }
 
     private var aramFeature: some View {
-        VStack(alignment: .leading, spacing: LeagueTheme.Space.md) {
-            HStack(alignment: .top, spacing: LeagueTheme.Space.md) {
-                Image(systemName: "dice.fill")
-                    .font(.title2)
-                    .foregroundStyle(LeagueTheme.gold)
-                    .frame(width: 42, height: 42)
-                    .background(LeagueTheme.elevated, in: RoundedRectangle(cornerRadius: 12))
-                    .accessibilityHidden(true)
+        HStack(alignment: .top, spacing: LeagueTheme.Space.md) {
+            Image(systemName: "dice.fill")
+                .font(.title2)
+                .foregroundStyle(LeagueTheme.gold)
+                .frame(width: 42, height: 42)
+                .background(LeagueTheme.elevated, in: RoundedRectangle(cornerRadius: 12))
+                .accessibilityHidden(true)
 
-                VStack(alignment: .leading, spacing: 4) {
-                    Text("Mode ARAM")
-                        .font(.headline.weight(.bold))
-                        .foregroundStyle(LeagueTheme.text)
-                    Text("Un champion aléatoire parmi vos filtres. Secouez aussi l'iPhone !")
-                        .font(.subheadline)
-                        .foregroundStyle(LeagueTheme.muted)
-                        .fixedSize(horizontal: false, vertical: true)
-                }
+            VStack(alignment: .leading, spacing: LeagueTheme.Space.xs) {
+                Text("Mode ARAM")
+                    .font(.headline.weight(.bold))
+                    .foregroundStyle(LeagueTheme.text)
+                Text("Secouez l’iPhone pour tirer un champion au hasard, même depuis une fiche.")
+                    .font(.subheadline)
+                    .foregroundStyle(LeagueTheme.muted)
+                    .fixedSize(horizontal: false, vertical: true)
             }
-
-            Button(action: selectARAM) {
-                Label("Tirer un champion", systemImage: "shuffle")
-            }
-            .buttonStyle(LeagueActionButtonStyle())
-            .disabled(filteredChampions.isEmpty || presentingARAM)
-            .accessibilityHint("Ouvre la fiche d'un champion choisi au hasard")
         }
         .padding(LeagueTheme.Space.md)
+        .frame(maxWidth: .infinity, alignment: .leading)
         .leagueSurface(radius: LeagueTheme.Corner.panel)
     }
 
@@ -198,12 +195,24 @@ struct ChampionsView: View {
         showOnlyFavorites = false
     }
 
-    private func selectARAM() {
-        guard !presentingARAM,
-              let chosen = filteredChampions.randomElement() else { return }
+    private func drawARAMFromCurrentPage() {
+        // Ignore repeated notifications while a single shake finishes.
+        let now = Date()
+        guard now.timeIntervalSince(lastShakeAt) > 0.8 else { return }
+
+        let currentChampionID = navigationPath.last
+        let candidates: [DBChampion]
+        if let currentChampionID {
+            // Within a detail, ARAM can select any champion except the current one.
+            candidates = viewModel.champions.filter { $0.id != currentChampionID }
+        } else {
+            // On the catalog, respect active search, role and favorites filters.
+            candidates = filteredChampions
+        }
+
+        guard let chosen = candidates.randomElement() else { return }
+        lastShakeAt = now
         UIImpactFeedbackGenerator(style: .medium).impactOccurred()
-        randomChampion = chosen
-        presentingARAM = true
-        // Destination loads its own details without delaying navigation.
+        navigationPath.append(chosen.id)
     }
 }
