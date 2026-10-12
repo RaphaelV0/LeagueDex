@@ -82,7 +82,8 @@ struct ChampionDetailView: View {
             .background(LeagueTheme.background)
         }
         .id(champion.id)
-        .edgesIgnoringSafeArea(.top)
+        // Respect the navigation bar and safe area: a new ARAM detail must fill
+        // the available screen without appearing under the status/navigation bars.
         .navigationBarTitleDisplayMode(.inline)
         .toolbar {
             ToolbarItem(placement: .navigationBarTrailing) {
@@ -110,39 +111,40 @@ struct ChampionDetailView: View {
 
     private var hero: some View {
         GeometryReader { geometry in
-            let minY = geometry.frame(in: .global).minY
-            let stretch = max(0, minY)
-            let heroHeight = min(500, max(320, scalableHeroHeight))
-
             ZStack(alignment: .bottomLeading) {
                 CachedAsyncImage(url: champion.splashArtURL) { image in
                     image.resizable().scaledToFill()
                 } placeholder: {
                     LeagueSkeletonBlock(radius: LeagueTheme.Corner.large)
                 }
-                    .imageDimension(500)
-                    .frame(width: geometry.size.width, height: heroHeight + stretch)
-                    .clipped()
-                    .offset(y: -stretch)
+                .imageDimension(500)
+                .frame(width: geometry.size.width, height: geometry.size.height)
+                .clipped()
 
                 LeagueTheme.championGradient
-                    .frame(height: heroHeight + stretch)
-                    .offset(y: -stretch)
 
                 VStack(alignment: .leading, spacing: LeagueTheme.Space.xs) {
                     Text(champion.name)
                         .font(.largeTitle.weight(.heavy))
                         .foregroundStyle(LeagueTheme.text)
                         .minimumScaleFactor(0.8)
+                        .fixedSize(horizontal: false, vertical: true)
+
                     Text(champion.title.capitalized)
                         .font(.title3)
                         .foregroundStyle(LeagueTheme.muted)
+                        .fixedSize(horizontal: false, vertical: true)
                 }
                 .padding(LeagueTheme.Space.md)
-                .offset(y: -stretch)
+                .frame(maxWidth: .infinity, alignment: .leading)
             }
+            .frame(width: geometry.size.width, height: geometry.size.height)
+            .clipped()
         }
+        // Avoid global-coordinate parallax, which may stretch or offset the
+        // splash art while a shake switches between champion destinations.
         .frame(height: min(500, max(320, scalableHeroHeight)))
+        .clipped()
         .accessibilityElement(children: .combine)
     }
 
