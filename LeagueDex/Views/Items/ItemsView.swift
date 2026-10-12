@@ -1,4 +1,5 @@
 import SwiftUI
+import UIKit
 
 private enum ItemPriceFilter: String, CaseIterable, Identifiable {
     case all = "Tous"
@@ -58,6 +59,7 @@ struct ItemsView: View {
                     HStack(spacing: LeagueTheme.Space.sm) {
                         ForEach(ItemPriceFilter.allCases) { filter in
                             LeagueFilterChip(title: filter.rawValue, isSelected: priceFilter == filter) {
+                                UISelectionFeedbackGenerator().selectionChanged()
                                 priceFilter = filter
                             }
                         }
@@ -163,7 +165,9 @@ struct ItemDetailView: View {
             VStack(spacing: LeagueTheme.Space.lg) {
                 CachedAsyncImage(url: item.iconURL) { image in
                     image.resizable().scaledToFit()
-                } placeholder: { LeagueTheme.elevated }
+                } placeholder: {
+                    LeagueSkeletonBlock(radius: LeagueTheme.Corner.large)
+                }
                 .frame(width: 112, height: 112)
                 .clipShape(RoundedRectangle(cornerRadius: LeagueTheme.Corner.large))
                 .overlay {
