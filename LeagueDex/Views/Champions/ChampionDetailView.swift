@@ -19,6 +19,7 @@ struct ChampionDetailView: View {
     @State private var selectedLevel: Double = 1
     @State private var selectedSpellTitle = ""
     @State private var selectedSpellDesc = ""
+    @State private var selectedSkin: DBSkin?
     @Environment(\.accessibilityReduceMotion) private var reduceMotion
 
     private let hapticFeedback = UIImpactFeedbackGenerator(style: .medium)
@@ -101,6 +102,9 @@ struct ChampionDetailView: View {
         }
         .onChange(of: champion.isDetailLoaded) { loaded in
             if loaded { selectPassiveIfNeeded() }
+        }
+        .fullScreenCover(item: $selectedSkin) { skin in
+            SkinFullscreenView(skin: skin, championName: champion.name)
         }
     }
 
@@ -336,28 +340,47 @@ struct ChampionDetailView: View {
 
     private var skinsSection: some View {
         VStack(alignment: .leading, spacing: LeagueTheme.Space.md) {
-            LeagueSectionHeader(title: "Galerie", subtitle: "\(champion.skins.count) apparence(s)")
+            LeagueSectionHeader(
+                title: "Galerie",
+                subtitle: "\(champion.skins.count) apparence(s) · Touchez une image pour l'agrandir"
+            )
             ScrollView(.horizontal, showsIndicators: false) {
                 LazyHStack(spacing: LeagueTheme.Space.md) {
                     ForEach(champion.skins) { skin in
-                        ZStack(alignment: .bottomLeading) {
-                            CachedAsyncImage(url: skin.url) { image in
-                                image.resizable().scaledToFill()
-                            } placeholder: { LeagueTheme.elevated }
-                            .imageDimension(310)
-                            .frame(width: 260, height: 160)
-                            .clipped()
+                        Button {
+                            selectedSkin = skin
+                        } label: {
+                            ZStack(alignment: .bottomLeading) {
+                                CachedAsyncImage(url: skin.url) { image in
+                                    image.resizable().scaledToFill()
+                                } placeholder: {
+                                    LeagueTheme.elevated
+                                }
+                                .imageDimension(310)
+                                .frame(width: 260, height: 160)
+                                .clipped()
 
-                            LinearGradient(colors: [.clear, .black.opacity(0.85)],
-                                           startPoint: .center, endPoint: .bottom)
-                            Text(skin.name == "default" ? champion.name : skin.name)
-                                .font(.headline)
-                                .foregroundStyle(.white)
-                                .padding(LeagueTheme.Space.md)
+                                LinearGradient(
+                                    colors: [.clear, .black.opacity(0.85)],
+                                    startPoint: .center,
+                                    endPoint: .bottom
+                                )
+
+                                Text(skin.name == "default" ? champion.name : skin.name)
+                                    .font(.headline)
+                                    .foregroundStyle(.white)
+                                    .padding(LeagueTheme.Space.md)
+                            }
+                            .frame(width: 260, height: 160)
+                            .clipShape(
+                                RoundedRectangle(cornerRadius: LeagueTheme.Corner.large)
+                            )
                         }
-                        .frame(width: 260, height: 160)
-                        .clipShape(RoundedRectangle(cornerRadius: LeagueTheme.Corner.large))
-                        .accessibilityElement(children: .combine)
+                        .buttonStyle(.plain)
+                        .accessibilityLabel(
+                            "Agrandir l'apparence \(skin.name == "default" ? champion.name : skin.name)"
+                        )
+                        .accessibilityHint("Afficher l'image en plein écran")
                     }
                 }
             }
