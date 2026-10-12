@@ -80,6 +80,21 @@ final class VenueViewModel: ObservableObject {
             throw VenueSubmissionError.invalidLocation
         }
         guard !isSaving else { throw VenueSubmissionError.alreadySaving }
+
+        let normalizedName = draft.name.trimmingCharacters(in: .whitespacesAndNewlines)
+        let normalizedAddress = draft.address.trimmingCharacters(in: .whitespacesAndNewlines)
+        guard normalizedName.count <= 120, normalizedAddress.count <= 250,
+              draft.openingHours.count <= 500, draft.phone.count <= 60,
+              draft.website.count <= 300, draft.details.count <= 1500 else {
+            throw VenueSubmissionError.textTooLong
+        }
+        if venues.contains(where: {
+            $0.name.compare(normalizedName, options: [.caseInsensitive, .diacriticInsensitive]) == .orderedSame
+                && $0.address.compare(normalizedAddress, options: [.caseInsensitive, .diacriticInsensitive]) == .orderedSame
+        }) {
+            throw VenueSubmissionError.duplicateLocation
+        }
+
         isSaving = true
         defer { isSaving = false }
 
@@ -90,7 +105,9 @@ final class VenueViewModel: ObservableObject {
             "address": trimmed(draft.address),
             "latitude": coordinate.latitude,
             "longitude": coordinate.longitude,
-            "type": draft.type
+            "type": draft.type,
+            "source": "community",
+            "createdAt": FieldValue.serverTimestamp()
         ]
         for (key, value) in [
             ("openingHours", draft.openingHours),
@@ -110,12 +127,16 @@ enum VenueSubmissionError: LocalizedError {
     case invalidLocation
     case alreadySaving
     case addressNotFound
+    case duplicateLocation
+    case textTooLong
 
     var errorDescription: String? {
         switch self {
         case .invalidLocation: return "Indiquez un nom et une adresse valides."
         case .alreadySaving: return "Un enregistrement est déjà en cours."
         case .addressNotFound: return "Adresse introuvable. Ajoutez la ville et le pays, puis réessayez."
+        case .duplicateLocation: return "Ce lieu existe déjà à cette adresse. Vérifiez la liste."
+        case .textTooLong: return "Certains champs sont trop longs. Raccourcissez les informations."
         }
     }
 }
