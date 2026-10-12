@@ -20,7 +20,9 @@ struct ItemsView: View {
     var body: some View {
         NavigationStack {
             Group {
-                if viewModel.isLoading && viewModel.items.isEmpty {
+                if let message = viewModel.errorMessage, viewModel.items.isEmpty {
+                    ContentUnavailableView(message, systemImage: "wifi.exclamationmark", description: Text("Vérifiez votre connexion puis réessayez."))
+                } else if viewModel.isLoading && viewModel.items.isEmpty {
                     VStack(spacing: 20) {
                         ProgressView().scaleEffect(1.5)
                         Text("Chargement de l'armurerie...").foregroundColor(.secondary)
