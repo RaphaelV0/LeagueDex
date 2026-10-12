@@ -50,23 +50,16 @@ struct ChampionsView: View {
                 // 2. CONTENU DE LA GRILLE
                 ScrollView {
                     if let message = viewModel.errorMessage, viewModel.champions.isEmpty {
-                        VStack(spacing: 16) {
-                            ContentUnavailableView(message, systemImage: "wifi.exclamationmark", description: Text("Vérifiez votre connexion puis réessayez."))
-                            Button("Réessayer") { viewModel.fetchChampionsFromFirebase() }
-                                .buttonStyle(LeagueActionButtonStyle())
-                                .padding(.horizontal, LeagueTheme.Space.lg)
-                        }
-                        .padding(.top, 60)
+                        LeagueErrorState(message: message) { viewModel.fetchChampionsFromFirebase() }
+                            .padding(.top, 60)
                     } else if viewModel.isLoading && viewModel.champions.isEmpty {
                         LeagueLoadingState(message: "Synchronisation des champions...")
                         .padding(.top, 120)
                     } else if filteredChampions.isEmpty && !viewModel.champions.isEmpty {
-                        VStack(spacing: 16) {
-                            Image(systemName: "magnifyingglass").font(.system(size: 48)).foregroundStyle(LeagueTheme.muted)
-                            Text("Aucun champion trouvé").font(.title2).bold().foregroundStyle(LeagueTheme.text)
-                            Text("Essayez un autre nom ou modifiez les filtres.")
-                                .font(.subheadline).foregroundStyle(LeagueTheme.muted)
-                        }
+                        LeagueEmptyState(
+                            title: "Aucun champion trouvé",
+                            detail: "Essayez un autre nom ou modifiez les filtres."
+                        )
                         .padding(.top, 100)
                     } else {
                         LazyVGrid(columns: gridColumns, spacing: 16) {
