@@ -63,7 +63,9 @@ final class LocationManager: NSObject, ObservableObject, CLLocationManagerDelega
     func locationManager(_ manager: CLLocationManager, didFailWithError error: Error) {
         isLocating = false
         // The map still works when a location fix cannot be obtained.
-        if (error as? CLError)?.code != .locationUnknown {
+        if (error as? CLError)?.code == .locationUnknown {
+            locationError = "Signal GPS temporairement indisponible. Réessayez."
+        } else {
             locationError = "Position indisponible. Réessayez depuis la carte."
         }
     }
