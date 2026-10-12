@@ -56,8 +56,12 @@ struct ChampionsView: View {
                 // 2. CONTENU DE LA GRILLE
                 ScrollView {
                     if let message = viewModel.errorMessage, viewModel.champions.isEmpty {
-                        ContentUnavailableView(message, systemImage: "wifi.exclamationmark", description: Text("Vérifiez votre connexion puis réessayez."))
-                            .padding(.top, 60)
+                        VStack(spacing: 16) {
+                            ContentUnavailableView(message, systemImage: "wifi.exclamationmark", description: Text("Vérifiez votre connexion puis réessayez."))
+                            Button("Réessayer") { viewModel.fetchChampionsFromFirebase() }
+                                .buttonStyle(.borderedProminent)
+                        }
+                        .padding(.top, 60)
                     } else if viewModel.isLoading && viewModel.champions.isEmpty {
                         VStack(spacing: 20) {
                             ProgressView().scaleEffect(1.5)
