@@ -25,17 +25,9 @@ Base : `design/lot-4-premium-motion` — hérite des lots 1 à 4. Aucune PR ni m
 - VoiceOver : meilleur libellé des objets, état du tri, traits sélectionnés des filtres et indications GPS.
 - Animations et skeletons du lot 4 restent compatibles avec « Réduire les animations ».
 
-## Vérifications automatisables
+## Validation Xcode
 
-Lancer depuis la racine du dépôt :
-
-```bash
-python3 scripts/check_lot5.py
-```
-
-Ce script valide des **invariants statiques** du code ; il ne prouve pas que l'application compile ni ne mesure les performances.
-
-Sur un Mac avec Xcode installé, lancer :
+Aucun script Python n'est nécessaire. Sur un Mac avec Xcode installé, lancer :
 
 ```bash
 bash scripts/validate-ios.sh
