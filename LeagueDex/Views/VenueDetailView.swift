@@ -85,7 +85,7 @@ struct VenueDetailView: View {
 
                     VStack(alignment: .leading, spacing: LeagueTheme.Space.sm) {
                         LeagueSectionHeader(title: "Horaires")
-                        Text(venue.openingHours?.isEmpty == false ? venue.openingHours! : "Horaires non renseignés")
+                        Text(venue.openingHours.flatMap { $0.isEmpty ? nil : $0 } ?? "Horaires non renseignés")
                             .font(.body)
                             .foregroundStyle(LeagueTheme.text)
                             .fixedSize(horizontal: false, vertical: true)
