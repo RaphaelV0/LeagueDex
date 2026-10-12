@@ -4,7 +4,7 @@ private enum ItemPriceFilter: String, CaseIterable, Identifiable {
     case all = "Tous"
     case budget = "1–1500"
     case medium = "1501–3000"
-    case premium = "3000+"
+    case premium = "3001+"
 
     var id: Self { self }
 
@@ -180,7 +180,7 @@ struct ItemDetailView: View {
                 }
 
                 VStack(alignment: .leading, spacing: LeagueTheme.Space.sm) {
-                    LeagueSectionHeader(title: "Coûts", subtitle: "Prix, composants et valeur de revente")
+                    LeagueSectionHeader(title: "Coûts", subtitle: "Coût initial, coût total et valeur de revente")
                     LazyVGrid(columns: priceColumns, spacing: LeagueTheme.Space.sm) {
                         PriceBox(title: "Coût de base", price: item.baseCost)
                         PriceBox(title: "Coût total", price: item.totalCost)
