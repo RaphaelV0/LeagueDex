@@ -213,6 +213,8 @@ struct ChampionsView: View {
         guard let chosen = candidates.randomElement() else { return }
         lastShakeAt = now
         UIImpactFeedbackGenerator(style: .medium).impactOccurred()
-        navigationPath.append(chosen.id)
+        // Never stack earlier ARAM draws: the only destination is the newest champion.
+        // Back always returns directly to the Champions catalog.
+        navigationPath = [chosen.id]
     }
 }
