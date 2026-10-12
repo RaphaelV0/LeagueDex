@@ -1,61 +1,78 @@
-//
-//  ItemsView.swift
-//  LeagueDex
-//
-//  Created by Etudiant on 17/09/2026.
-//
-
-
 import SwiftUI
 
 struct ItemsView: View {
     @StateObject private var viewModel = ItemViewModel()
     @State private var searchText = ""
-    
+
     var filteredItems: [DBItem] {
         if searchText.isEmpty { return viewModel.items }
         return viewModel.items.filter { $0.name.localizedCaseInsensitiveContains(searchText) }
     }
-    
+
     var body: some View {
         NavigationStack {
             Group {
                 if let message = viewModel.errorMessage, viewModel.items.isEmpty {
-                    VStack(spacing: 16) {
-                        ContentUnavailableView(message, systemImage: "wifi.exclamationmark", description: Text("Vérifiez votre connexion puis réessayez."))
+                    VStack(spacing: LeagueTheme.Space.md) {
+                        ContentUnavailableView(
+                            message,
+                            systemImage: "wifi.exclamationmark",
+                            description: Text("Vérifiez votre connexion puis réessayez.")
+                        )
                         Button("Réessayer") { viewModel.fetchItemsFromFirebase() }
-                            .buttonStyle(.borderedProminent)
+                            .buttonStyle(LeagueActionButtonStyle())
+                            .padding(.horizontal, LeagueTheme.Space.lg)
                     }
                 } else if viewModel.isLoading && viewModel.items.isEmpty {
-                    VStack(spacing: 20) {
-                        ProgressView().scaleEffect(1.5)
-                        Text("Chargement de l'armurerie...").foregroundColor(.secondary)
-                    }
+                    LeagueLoadingState(message: "Chargement de l'armurerie...")
+                } else if filteredItems.isEmpty {
+                    ContentUnavailableView(
+                        "Aucun objet trouvé",
+                        systemImage: "magnifyingglass",
+                        description: Text("Essayez un autre nom d'objet.")
+                    )
                 } else {
                     List(filteredItems) { item in
                         NavigationLink(destination: ItemDetailView(item: item)) {
-                            HStack(spacing: 15) {
+                            HStack(spacing: LeagueTheme.Space.md) {
                                 CachedAsyncImage(url: item.iconURL) { image in
-                                    image.resizable()
-                                } placeholder: { ProgressView() }
-                                .frame(width: 40, height: 40).clipShape(RoundedRectangle(cornerRadius: 8))
-                                
-                                VStack(alignment: .leading) {
-                                    Text(item.name).font(.headline)
-                                    Text(item.plaintext).font(.caption).foregroundColor(.secondary).lineLimit(1)
+                                    image.resizable().scaledToFit()
+                                } placeholder: {
+                                    LeagueTheme.elevated
                                 }
-                                Spacer()
-                                
-                                HStack(spacing: 4) {
-                                    Text("\(item.totalCost)").font(.subheadline).bold().foregroundColor(.yellow)
-                                    Image(systemName: "circle.hexagongrid.fill").foregroundColor(.yellow).font(.caption)
+                                .frame(width: 48, height: 48)
+                                .clipShape(RoundedRectangle(cornerRadius: LeagueTheme.Corner.small))
+                                .accessibilityHidden(true)
+
+                                VStack(alignment: .leading, spacing: LeagueTheme.Space.xs) {
+                                    Text(item.name)
+                                        .font(.headline)
+                                        .foregroundStyle(LeagueTheme.text)
+
+                                    Text(item.plaintext)
+                                        .font(.caption)
+                                        .foregroundStyle(LeagueTheme.muted)
+                                        .lineLimit(2)
                                 }
+
+                                Spacer(minLength: 0)
+
+                                Label(item.totalCost.formatted(), systemImage: "circle.hexagongrid.fill")
+                                    .font(.subheadline.weight(.semibold))
+                                    .foregroundStyle(LeagueTheme.gold)
+                                    .labelStyle(.titleAndIcon)
                             }
+                            .padding(.vertical, LeagueTheme.Space.xs)
                         }
+                        .listRowBackground(LeagueTheme.surface)
+                        .listRowSeparatorTint(LeagueTheme.border)
                     }
                     .listStyle(.plain)
+                    .scrollContentBackground(.hidden)
                 }
             }
+            .frame(maxWidth: .infinity, maxHeight: .infinity)
+            .background(LeagueTheme.background)
             .navigationTitle("Armurerie")
             .searchable(text: $searchText, prompt: "Rechercher un objet...")
         }
@@ -64,35 +81,54 @@ struct ItemsView: View {
 
 struct ItemDetailView: View {
     let item: DBItem
-    
+
     var body: some View {
         ScrollView {
-            VStack(spacing: 20) {
+            VStack(spacing: LeagueTheme.Space.lg) {
                 CachedAsyncImage(url: item.iconURL) { image in
                     image.resizable().scaledToFit()
-                } placeholder: { ProgressView() }
-                .frame(width: 120, height: 120).clipShape(RoundedRectangle(cornerRadius: 16)).shadow(radius: 5)
-                
-                Text(item.name).font(.largeTitle).bold()
-                Text(item.plaintext).font(.title3).foregroundColor(.secondary)
-                
-                HStack(spacing: 20) {
+                } placeholder: {
+                    LeagueTheme.elevated
+                }
+                .frame(width: 112, height: 112)
+                .clipShape(RoundedRectangle(cornerRadius: LeagueTheme.Corner.large))
+                .overlay {
+                    RoundedRectangle(cornerRadius: LeagueTheme.Corner.large)
+                        .strokeBorder(LeagueTheme.border, lineWidth: 1)
+                }
+
+                VStack(spacing: LeagueTheme.Space.sm) {
+                    Text(item.name)
+                        .font(.largeTitle.weight(.bold))
+                        .foregroundStyle(LeagueTheme.text)
+                        .multilineTextAlignment(.center)
+
+                    Text(item.plaintext)
+                        .font(.subheadline)
+                        .foregroundStyle(LeagueTheme.muted)
+                        .multilineTextAlignment(.center)
+                }
+
+                HStack(alignment: .top, spacing: LeagueTheme.Space.sm) {
                     PriceBox(title: "Coût de base", price: item.baseCost)
-                    PriceBox(title: "Coût Total", price: item.totalCost)
+                    PriceBox(title: "Coût total", price: item.totalCost)
                     PriceBox(title: "Revente", price: item.sellPrice)
                 }
-                .padding(.vertical)
-                
-                VStack(alignment: .leading, spacing: 10) {
-                    Text("Statistiques & Passifs").font(.headline)
+
+                VStack(alignment: .leading, spacing: LeagueTheme.Space.md) {
+                    LeagueSectionHeader(title: "Statistiques & Passifs")
                     Text(item.itemDescription.removingHTML())
-                        .font(.body).padding().frame(maxWidth: .infinity, alignment: .leading)
-                        .background(Color(.systemGray6)).cornerRadius(12)
+                        .font(.body)
+                        .foregroundStyle(LeagueTheme.text)
+                        .frame(maxWidth: .infinity, alignment: .leading)
+                        .padding(LeagueTheme.Space.md)
+                        .leagueSurface()
                 }
-                .padding(.horizontal)
             }
-            .padding(.vertical)
+            .padding(LeagueTheme.Space.md)
+            .padding(.bottom, LeagueTheme.Space.lg)
         }
+        .background(LeagueTheme.background)
         .navigationBarTitleDisplayMode(.inline)
     }
 }
