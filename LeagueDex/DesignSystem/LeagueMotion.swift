@@ -69,6 +69,7 @@ struct LeagueSkeletonBlock: View {
                     }
                 }
             }
+            .onDisappear { glowing = false }
             .accessibilityHidden(true)
     }
 }
