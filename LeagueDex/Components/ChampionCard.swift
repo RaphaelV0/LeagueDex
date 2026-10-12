@@ -14,6 +14,7 @@ struct ChampionCard: View {
                         .foregroundStyle(LeagueTheme.muted)
                 }
             }
+            .imageDimension(260)
             .frame(maxWidth: .infinity)
             .frame(height: 184)
             .clipped()
