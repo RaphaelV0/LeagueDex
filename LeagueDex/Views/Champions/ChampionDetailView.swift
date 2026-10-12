@@ -38,13 +38,13 @@ struct ChampionDetailView: View {
                         .clipped()
                         .offset(y: isScrollingDown ? -minY : 0)
                         
-                        LinearGradient(colors: [.clear, .black.opacity(0.8)], startPoint: .center, endPoint: .bottom)
+                        LeagueTheme.championGradient
                             .frame(height: isScrollingDown ? 350 + minY : 350)
                             .offset(y: isScrollingDown ? -minY : 0)
                         
                         VStack(alignment: .leading) {
-                            Text(champion.name).font(.system(size: 44, weight: .heavy, design: .rounded)).foregroundColor(.white)
-                            Text(champion.title.capitalized).font(.title3).foregroundColor(.white.opacity(0.8))
+                            Text(champion.name).font(.largeTitle.weight(.heavy)).foregroundStyle(LeagueTheme.text)
+                            Text(champion.title.capitalized).font(.title3).foregroundStyle(LeagueTheme.muted)
                         }
                         .padding().offset(y: isScrollingDown ? -minY : 0)
                     }
@@ -54,15 +54,17 @@ struct ChampionDetailView: View {
                 VStack(alignment: .leading, spacing: 28) {
                     HStack {
                         ForEach(champion.tags, id: \.self) { tag in
-                            Text(tag).font(.subheadline).bold().padding(.horizontal, 16).padding(.vertical, 8)
-                                .background(.ultraThinMaterial).clipShape(Capsule())
+                            Text(tag).font(.subheadline.weight(.semibold))
+                                .foregroundStyle(LeagueTheme.gold)
+                                .padding(.horizontal, 16).padding(.vertical, 8)
+                                .background(LeagueTheme.elevated, in: Capsule())
                         }
                     }
                     .padding(.top, 16)
                     
                     if champion.isDetailLoaded {
                         VStack(alignment: .leading, spacing: 12) {
-                            Text("Compétences").font(.title2).bold()
+                            LeagueSectionHeader(title: "Compétences")
                             HStack(spacing: 15) {
                                 SpellIcon(url: URL(string: "https://ddragon.leagueoflegends.com/cdn/\(DataDragon.version)/img/passive/\(champion.passiveImage)"))
                                     .onTapGesture {
@@ -85,21 +87,21 @@ struct ChampionDetailView: View {
                             }
                             if !selectedSpellTitle.isEmpty {
                                 VStack(alignment: .leading, spacing: 6) {
-                                    Text(selectedSpellTitle).font(.headline).foregroundColor(.blue)
-                                    Text(selectedSpellDesc).font(.subheadline).foregroundColor(.secondary)
+                                    Text(selectedSpellTitle).font(.headline).foregroundStyle(LeagueTheme.gold)
+                                    Text(selectedSpellDesc).font(.subheadline).foregroundStyle(LeagueTheme.muted)
                                 }
                                 .padding().frame(maxWidth: .infinity, alignment: .leading)
-                                .background(Color.blue.opacity(0.08)).cornerRadius(12)
+                                .leagueSurface(radius: LeagueTheme.Corner.medium)
                             }
                         }
                     }
                     
                     VStack(alignment: .leading, spacing: 16) {
                         HStack {
-                            Text("Statistiques").font(.title2).bold()
+                            Text("Statistiques").font(.title2).bold().foregroundStyle(LeagueTheme.text)
                             Spacer()
                             HStack {
-                                Text("Lvl \(selectedLevel)").foregroundColor(.blue).fontWeight(.bold)
+                                Text("Lvl \(selectedLevel)").foregroundStyle(LeagueTheme.gold).fontWeight(.bold)
                                 Stepper("", value: $selectedLevel, in: 1...18).labelsHidden()
                             }
                         }
@@ -114,25 +116,25 @@ struct ChampionDetailView: View {
                             RealStatCard(title: "Critique", icon: "target", color: .pink, value: champion.statAt(base: champion.crit, growth: champion.critperlevel, level: selectedLevel))
                         }
                     }
-                    .padding().background(.regularMaterial).cornerRadius(20)
+                    .padding().leagueSurface(radius: LeagueTheme.Corner.large)
                     
                     if !champion.allyTips.isEmpty || !champion.enemyTips.isEmpty {
                         VStack(alignment: .leading, spacing: 16) {
-                            Text("Astuces").font(.title2).bold()
+                            LeagueSectionHeader(title: "Astuces")
                             if !champion.allyTips.isEmpty {
-                                Text("Pour jouer \(champion.name) :").font(.headline).foregroundColor(.green)
-                                ForEach(champion.allyTips, id: \.self) { tip in Text("• \(tip)").font(.subheadline).foregroundColor(.secondary) }
+                                Text("Pour jouer \(champion.name) :").font(.headline).foregroundStyle(LeagueTheme.cyan)
+                                ForEach(champion.allyTips, id: \.self) { tip in Text("• \(tip)").font(.subheadline).foregroundStyle(LeagueTheme.muted) }
                             }
                             if !champion.enemyTips.isEmpty {
-                                Text("Contre \(champion.name) :").font(.headline).foregroundColor(.red).padding(.top, 8)
-                                ForEach(champion.enemyTips, id: \.self) { tip in Text("• \(tip)").font(.subheadline).foregroundColor(.secondary) }
+                                Text("Contre \(champion.name) :").font(.headline).foregroundStyle(LeagueTheme.danger).padding(.top, 8)
+                                ForEach(champion.enemyTips, id: \.self) { tip in Text("• \(tip)").font(.subheadline).foregroundStyle(LeagueTheme.muted) }
                             }
                         }
                     }
                     
                     if !champion.skins.isEmpty {
                         VStack(alignment: .leading, spacing: 12) {
-                            Text("Galerie").font(.title2).bold()
+                            LeagueSectionHeader(title: "Galerie")
                             ScrollView(.horizontal, showsIndicators: false) {
                                 HStack(spacing: 16) {
                                     ForEach(champion.skins) { skin in
@@ -151,6 +153,7 @@ struct ChampionDetailView: View {
                 .padding(.horizontal).padding(.bottom, 40)
             }
         }
+        .background(LeagueTheme.background)
         .id(champion.id) // Force le rechargement complet de la vue et de l'image si le champion change à la volée (ARAM)
         .edgesIgnoringSafeArea(.top)
         .navigationBarTitleDisplayMode(.inline)
@@ -160,8 +163,10 @@ struct ChampionDetailView: View {
                     hapticFeedback.impactOccurred()
                     viewModel.toggleFavorite(for: champion)
                 }) {
-                    Image(systemName: champion.isFavorite ? "heart.fill" : "heart").foregroundColor(champion.isFavorite ? .red : .primary)
+                    Image(systemName: champion.isFavorite ? "heart.fill" : "heart")
+                        .foregroundStyle(champion.isFavorite ? LeagueTheme.danger : LeagueTheme.gold)
                 }
+                .accessibilityLabel(champion.isFavorite ? "Retirer des favoris" : "Ajouter aux favoris")
             }
         }
         .task {
