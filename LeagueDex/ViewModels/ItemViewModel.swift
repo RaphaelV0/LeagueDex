@@ -29,6 +29,8 @@ class ItemViewModel: ObservableObject {
     }
     
     func fetchItemsFromFirebase() {
+        listenerRegistration?.remove()
+        errorMessage = nil
         isLoading = true
         listenerRegistration = db.collection("items").addSnapshotListener { [weak self] snapshot, error in
             guard let self = self else { return }
