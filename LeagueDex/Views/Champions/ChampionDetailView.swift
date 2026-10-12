@@ -19,6 +19,7 @@ struct ChampionDetailView: View {
     @State private var selectedLevel: Int = 1
     @State private var selectedSpellTitle: String = ""
     @State private var selectedSpellDesc: String = ""
+    @Environment(\.accessibilityReduceMotion) private var reduceMotion
     
     let hapticFeedback = UIImpactFeedbackGenerator(style: .medium)
     let columns = [GridItem(.flexible()), GridItem(.flexible())]
@@ -65,24 +66,30 @@ struct ChampionDetailView: View {
                     if champion.isDetailLoaded {
                         VStack(alignment: .leading, spacing: 12) {
                             LeagueSectionHeader(title: "Compétences")
-                            HStack(spacing: 15) {
-                                SpellIcon(url: URL(string: "https://ddragon.leagueoflegends.com/cdn/\(DataDragon.version)/img/passive/\(champion.passiveImage)"))
-                                    .onTapGesture {
-                                        hapticFeedback.impactOccurred(intensity: 0.7)
-                                        withAnimation {
-                                            selectedSpellTitle = "Passif: \(champion.passiveName)"
-                                            selectedSpellDesc = champion.passiveDesc.removingHTML()
-                                        }
+                            HStack(spacing: LeagueTheme.Space.sm) {
+                                Button {
+                                    hapticFeedback.impactOccurred(intensity: 0.7)
+                                    withAnimation(reduceMotion ? nil : .easeOut(duration: LeagueTheme.pressDuration)) {
+                                        selectedSpellTitle = "Passif: \(champion.passiveName)"
+                                        selectedSpellDesc = champion.passiveDesc.removingHTML()
                                     }
+                                } label: {
+                                    SpellIcon(url: DataDragon.imageURL("passive/\(champion.passiveImage)"))
+                                }
+                                .buttonStyle(.plain)
+                                .accessibilityLabel("Passif : \(champion.passiveName)")
                                 ForEach(champion.spells) { spell in
-                                    SpellIcon(url: spell.url)
-                                        .onTapGesture {
-                                            hapticFeedback.impactOccurred(intensity: 0.7)
-                                            withAnimation {
-                                                selectedSpellTitle = spell.name
-                                                selectedSpellDesc = spell.desc.removingHTML()
-                                            }
+                                    Button {
+                                        hapticFeedback.impactOccurred(intensity: 0.7)
+                                        withAnimation(reduceMotion ? nil : .easeOut(duration: LeagueTheme.pressDuration)) {
+                                            selectedSpellTitle = spell.name
+                                            selectedSpellDesc = spell.desc.removingHTML()
                                         }
+                                    } label: {
+                                        SpellIcon(url: spell.url)
+                                    }
+                                    .buttonStyle(.plain)
+                                    .accessibilityLabel("Compétence : \(spell.name)")
                                 }
                             }
                             if !selectedSpellTitle.isEmpty {
