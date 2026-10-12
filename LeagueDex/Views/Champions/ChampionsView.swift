@@ -33,24 +33,18 @@ struct ChampionsView: View {
                 ScrollView(.horizontal, showsIndicators: false) {
                     HStack(spacing: 12) {
                         ForEach(roles, id: \.1) { roleUI, roleTag in
-                            Button(action: {
+                            LeagueFilterChip(title: roleUI, isSelected: selectedRole == roleTag) {
                                 haptic.impactOccurred(intensity: 0.5)
-                                withAnimation(.spring(response: 0.4, dampingFraction: 0.7)) {
+                                withAnimation(.easeOut(duration: LeagueTheme.pressDuration)) {
                                     selectedRole = roleTag
                                 }
-                            }) {
-                                Text(roleUI)
-                                    .font(.subheadline).fontWeight(.semibold)
-                                    .padding(.horizontal, 20).padding(.vertical, 10)
-                                    .background(selectedRole == roleTag ? Color.blue : Color(.systemGray6))
-                                    .foregroundColor(selectedRole == roleTag ? .white : .primary)
-                                    .clipShape(Capsule())
                             }
                         }
                     }
                     .padding(.horizontal, 16).padding(.vertical, 12)
                 }
-                .background(Color(.systemBackground).shadow(color: .black.opacity(0.05), radius: 5, y: 5))
+                .background(LeagueTheme.surface)
+                .overlay(alignment: .bottom) { LeagueTheme.border.frame(height: 1) }
                 .zIndex(1)
                 
                 // 2. CONTENU DE LA GRILLE
@@ -59,19 +53,19 @@ struct ChampionsView: View {
                         VStack(spacing: 16) {
                             ContentUnavailableView(message, systemImage: "wifi.exclamationmark", description: Text("Vérifiez votre connexion puis réessayez."))
                             Button("Réessayer") { viewModel.fetchChampionsFromFirebase() }
-                                .buttonStyle(.borderedProminent)
+                                .buttonStyle(LeagueActionButtonStyle())
+                                .padding(.horizontal, LeagueTheme.Space.lg)
                         }
                         .padding(.top, 60)
                     } else if viewModel.isLoading && viewModel.champions.isEmpty {
-                        VStack(spacing: 20) {
-                            ProgressView().scaleEffect(1.5)
-                            Text("Synchronisation Firebase...").font(.headline).foregroundColor(.secondary)
-                        }
+                        LeagueLoadingState(message: "Synchronisation des champions...")
                         .padding(.top, 120)
                     } else if filteredChampions.isEmpty && !viewModel.champions.isEmpty {
                         VStack(spacing: 16) {
-                            Image(systemName: "magnifyingglass").font(.system(size: 60)).foregroundColor(.secondary.opacity(0.5))
-                            Text("Aucun champion trouvé").font(.title2).bold()
+                            Image(systemName: "magnifyingglass").font(.system(size: 48)).foregroundStyle(LeagueTheme.muted)
+                            Text("Aucun champion trouvé").font(.title2).bold().foregroundStyle(LeagueTheme.text)
+                            Text("Essayez un autre nom ou modifiez les filtres.")
+                                .font(.subheadline).foregroundStyle(LeagueTheme.muted)
                         }
                         .padding(.top, 100)
                     } else {
@@ -86,17 +80,29 @@ struct ChampionsView: View {
                         .padding(16)
                     }
                 }
+                .background(LeagueTheme.background)
             }
+            .background(LeagueTheme.background)
             .navigationTitle("LeagueDex")
             .searchable(text: $searchText, prompt: "Rechercher un champion...")
             .toolbar {
+                ToolbarItem(placement: .navigationBarTrailing) {
+                    Button(action: selectRandomChampion) {
+                        Image(systemName: "dice.fill")
+                            .foregroundStyle(LeagueTheme.gold)
+                    }
+                    .disabled(filteredChampions.isEmpty)
+                    .accessibilityLabel("Champion aléatoire ARAM")
+                    .accessibilityHint("Tire au sort un champion parmi les filtres actifs")
+                }
                 ToolbarItem(placement: .navigationBarTrailing) {
                     Button(action: {
                         haptic.impactOccurred(intensity: 0.5)
                         withAnimation { showOnlyFavorites.toggle() }
                     }) {
                         Image(systemName: showOnlyFavorites ? "heart.fill" : "heart")
-                            .foregroundColor(showOnlyFavorites ? .red : .blue)
+                            .foregroundColor(showOnlyFavorites ? LeagueTheme.danger : LeagueTheme.gold)
+                            .accessibilityLabel(showOnlyFavorites ? "Afficher tous les champions" : "Afficher les favoris")
                             .font(.title3)
                     }
                 }
@@ -115,19 +121,17 @@ struct ChampionsView: View {
                 }
             )
             // DÉTECTEUR DE SECOUSSE (ARAM)
-            .onShake {
-                if !filteredChampions.isEmpty {
-                    haptic.impactOccurred(intensity: 1.0)
-                    let chosenChamp = filteredChampions.randomElement()!
-                    randomChampion = chosenChamp
-                    
-                    // On charge d'abord les détails pour que la vue s'affiche complète
-                    Task {
-                        await viewModel.loadDetails(for: chosenChamp)
-                        isNavigatingFromShake = true
-                    }
-                }
-            }
+            .onShake { selectRandomChampion() }
+        }
+    }
+
+    private func selectRandomChampion() {
+        guard let chosenChampion = filteredChampions.randomElement() else { return }
+        haptic.impactOccurred(intensity: 1.0)
+        randomChampion = chosenChampion
+        Task {
+            await viewModel.loadDetails(for: chosenChampion)
+            isNavigatingFromShake = true
         }
     }
 }
