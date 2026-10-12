@@ -120,6 +120,7 @@ struct ItemsView: View {
                                     CachedAsyncImage(url: item.iconURL) { image in
                                         image.resizable().scaledToFit()
                                     } placeholder: { LeagueTheme.elevated }
+                                    .imageDimension(75)
                                     .frame(width: 48, height: 48)
                                     .clipShape(RoundedRectangle(cornerRadius: LeagueTheme.Corner.small))
                                     .accessibilityHidden(true)
@@ -168,6 +169,7 @@ struct ItemDetailView: View {
                 } placeholder: {
                     LeagueSkeletonBlock(radius: LeagueTheme.Corner.large)
                 }
+                .imageDimension(155)
                 .frame(width: 112, height: 112)
                 .clipShape(RoundedRectangle(cornerRadius: LeagueTheme.Corner.large))
                 .overlay {
