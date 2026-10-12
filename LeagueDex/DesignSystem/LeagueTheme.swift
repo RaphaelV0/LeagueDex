@@ -3,15 +3,15 @@ import SwiftUI
 /// Shared colors, spacing and animation values for LeagueDex.
 /// Dark mode is the primary supported appearance.
 enum LeagueTheme {
-    static let background = Color(red: 8/255, green: 14/255, blue: 24/255)
-    static let surface = Color(red: 17/255, green: 28/255, blue: 43/255)
-    static let elevated = Color(red: 29/255, green: 48/255, blue: 66/255)
-    static let border = Color(red: 56/255, green: 77/255, blue: 99/255)
-    static let gold = Color(red: 198/255, green: 166/255, blue: 107/255)
-    static let cyan = Color(red: 72/255, green: 199/255, blue: 217/255)
-    static let text = Color(red: 244/255, green: 240/255, blue: 231/255)
-    static let muted = Color(red: 155/255, green: 174/255, blue: 195/255)
-    static let danger = Color(red: 214/255, green: 108/255, blue: 117/255)
+    static let background = Color(red: 8.0 / 255.0, green: 14.0 / 255.0, blue: 24.0 / 255.0)
+    static let surface = Color(red: 17.0 / 255.0, green: 28.0 / 255.0, blue: 43.0 / 255.0)
+    static let elevated = Color(red: 29.0 / 255.0, green: 48.0 / 255.0, blue: 66.0 / 255.0)
+    static let border = Color(red: 56.0 / 255.0, green: 77.0 / 255.0, blue: 99.0 / 255.0)
+    static let gold = Color(red: 198.0 / 255.0, green: 166.0 / 255.0, blue: 107.0 / 255.0)
+    static let cyan = Color(red: 72.0 / 255.0, green: 199.0 / 255.0, blue: 217.0 / 255.0)
+    static let text = Color(red: 244.0 / 255.0, green: 240.0 / 255.0, blue: 231.0 / 255.0)
+    static let muted = Color(red: 155.0 / 255.0, green: 174.0 / 255.0, blue: 195.0 / 255.0)
+    static let danger = Color(red: 214.0 / 255.0, green: 108.0 / 255.0, blue: 117.0 / 255.0)
 
     enum Space {
         static let xs: CGFloat = 4
