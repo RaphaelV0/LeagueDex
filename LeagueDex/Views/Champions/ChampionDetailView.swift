@@ -64,7 +64,7 @@ struct ChampionDetailView: View {
                         VStack(alignment: .leading, spacing: 12) {
                             Text("Compétences").font(.title2).bold()
                             HStack(spacing: 15) {
-                                SpellIcon(url: URL(string: "https://ddragon.leagueoflegends.com/cdn/14.18.1/img/passive/\(champion.passiveImage)"))
+                                SpellIcon(url: URL(string: "https://ddragon.leagueoflegends.com/cdn/\(DataDragon.version)/img/passive/\(champion.passiveImage)"))
                                     .onTapGesture {
                                         hapticFeedback.impactOccurred(intensity: 0.7)
                                         withAnimation {
