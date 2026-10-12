@@ -84,6 +84,12 @@ struct VenuesMapView: View {
                             .frame(minHeight: 44)
                     }
                     .accessibilityHint("Affiche la liste des lieux disponibles sur la carte")
+                    .accessibilityValue("\(visibleVenues.count) lieux disponibles")
+                    if locationManager.isLocating {
+                        ProgressView()
+                            .tint(LeagueTheme.gold)
+                            .accessibilityLabel("Recherche de votre position")
+                    }
                     Button(action: recenterOnUser) {
                         Image(systemName: "location.fill")
                             .frame(width: 44, height: 44)
@@ -94,18 +100,31 @@ struct VenuesMapView: View {
                     }
                     .disabled(locationManager.userLocation == nil)
                     .accessibilityLabel("Recentrer sur ma position")
+                    .accessibilityHint("Centre la carte sur votre dernière position connue")
                 }
                 .padding(.horizontal, LeagueTheme.Space.md)
                 .background(LeagueTheme.background)
 
-                if locationManager.authorizationStatus == .denied
-                    || locationManager.authorizationStatus == .restricted {
-                    Text("Localisation désactivée : les lieux restent consultables, sans distance GPS.")
-                        .font(.caption)
-                        .foregroundStyle(LeagueTheme.muted)
-                        .frame(maxWidth: .infinity, alignment: .leading)
-                        .padding(LeagueTheme.Space.md)
-                        .background(LeagueTheme.surface)
+                if let message = locationManager.locationError {
+                    HStack(alignment: .center, spacing: LeagueTheme.Space.sm) {
+                        Image(systemName: "location.slash")
+                            .accessibilityHidden(true)
+                        Text(message)
+                            .font(.caption)
+                            .fixedSize(horizontal: false, vertical: true)
+                        Spacer(minLength: 0)
+                        if locationManager.authorizationStatus != .denied
+                            && locationManager.authorizationStatus != .restricted {
+                            Button("Réessayer") { locationManager.requestLocation() }
+                                .font(.subheadline.weight(.medium))
+                                .foregroundStyle(LeagueTheme.gold)
+                                .frame(minHeight: 44)
+                        }
+                    }
+                    .foregroundStyle(LeagueTheme.muted)
+                    .padding(.horizontal, LeagueTheme.Space.md)
+                    .background(LeagueTheme.surface)
+                    .accessibilityElement(children: .contain)
                 }
 
                 ZStack(alignment: .bottom) {
