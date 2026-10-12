@@ -2,7 +2,7 @@
 
 ## Comportements livrés
 - Un seul défilement pour l'écran Champions, des cartes à largeur contrainte et une barre de recherche intégrée à la navigation.
-- ARAM accessible sur le catalogue et sur **chaque** fiche champion. La secousse reste possible depuis le catalogue.
+- ARAM déclenché **uniquement en secouant l'iPhone**, depuis le catalogue Champions ou chaque fiche champion. Aucun bouton de relance n'est affiché. Une seule destination est ajoutée pour chaque geste.
 - Carte alimentée par les trois lieux embarqués et par un `addSnapshotListener` sur **Firestore `venues`**.
 - Ajout direct à Firestore après vérification de l'adresse par Apple Plans et confirmation d'un repère.
 - Les fiches de lieux affichent coordonnées, adresse, distance GPS, horaires déclarés, notes, téléphone et site web (si renseignés), ainsi que l'itinéraire Apple Plans.
@@ -41,7 +41,10 @@ Cette fonctionnalité écrit **directement** depuis l'app sur la collection `ven
 
 - [ ] Compilation Debug et Release et absence de warning bloquant Swift 6.
 - [ ] Accueil : petit iPhone, Dynamic Type, cartes sans débordement ni doublon de scroll, recherche, favoris, rôles, tri.
-- [ ] ARAM : tirage depuis le catalogue, secousse, puis nouveau tirage depuis la fiche. Navigation retour correcte.
+- [ ] ARAM : secouer depuis le catalogue, ouvrir une fiche, secouer de nouveau sur la fiche, puis revenir en arrière. Aucun bouton de tirage ou de relance.
+- [ ] Secouer l'iPhone sur les onglets Objets et Lieux : aucun tirage ARAM ne doit se produire.
+- [ ] Plusieurs secousses rapides : vérifier qu'il n'y a pas plusieurs navigations simultanées.
+- [ ] Depuis le catalogue, vérifier le respect des filtres lors d'un tirage ; depuis une fiche, éviter de retomber sur le même champion.
 - [ ] Carte : les trois lieux embarqués restent visibles même si Firestore est indisponible.
 - [ ] Création : renseigner nom, adresse, type, horaires, notes et téléphone ; vérifier la position ; enregistrer dans Firestore.
 - [ ] Vérifier dans la console Firebase que le document est créé dans `venues` avec un ID unique.
