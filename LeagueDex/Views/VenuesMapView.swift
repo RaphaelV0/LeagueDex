@@ -1,6 +1,7 @@
 import SwiftUI
 import MapKit
 import CoreLocation
+import UIKit
 
 private enum VenueKind: String, CaseIterable, Identifiable {
     case all = "Tous"
@@ -56,6 +57,7 @@ struct VenuesMapView: View {
                     HStack(spacing: LeagueTheme.Space.sm) {
                         ForEach(VenueKind.allCases) { kind in
                             LeagueFilterChip(title: kind.rawValue, isSelected: selectedKind == kind) {
+                                UISelectionFeedbackGenerator().selectionChanged()
                                 selectedKind = kind
                                 if selectedVenue == nil { selectedVenueID = nil }
                             }
@@ -116,6 +118,8 @@ struct VenuesMapView: View {
                                     .padding(12)
                                     .background(LeagueTheme.gold, in: Circle())
                                     .foregroundStyle(LeagueTheme.background)
+                                    .scaleEffect(selectedVenueID == venue.id && !reduceMotion ? 1.12 : 1)
+                                    .animation(reduceMotion ? nil : LeagueMotion.quick, value: selectedVenueID)
                                     .overlay {
                                         Circle().strokeBorder(LeagueTheme.text.opacity(0.7), lineWidth: 1)
                                     }
@@ -130,12 +134,17 @@ struct VenuesMapView: View {
                         venuePanel(venue)
                             .padding(.horizontal, LeagueTheme.Space.md)
                             .padding(.bottom, LeagueTheme.Space.sm)
-                            .transition(.move(edge: .bottom).combined(with: .opacity))
+                            .transition(reduceMotion ? .opacity : .move(edge: .bottom).combined(with: .opacity))
                     }
                 }
                 .animation(reduceMotion ? nil : .easeOut(duration: 0.22), value: selectedVenueID)
             }
             .navigationTitle("Lieux E-sport")
+            .onChange(of: selectedVenueID) { newSelection in
+                if newSelection != nil {
+                    UISelectionFeedbackGenerator().selectionChanged()
+                }
+            }
             .onAppear { locationManager.requestLocation() }
         }
     }
