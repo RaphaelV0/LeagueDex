@@ -16,6 +16,7 @@ struct VenuesMapView: View {
     // ID du lieu actuellement sélectionné sur la carte
     @State private var selectedVenueID: String?
     @Environment(\.openURL) var openURL
+    @Environment(\.accessibilityReduceMotion) private var reduceMotion
     
     let venues = [
         DBVenue(id: "1", name: "Meltdown Paris", address: "6 Passage des Vernonnes, Paris", latitude: 48.866, longitude: 2.352, type: "Bar E-sport"),
@@ -37,8 +38,8 @@ struct VenuesMapView: View {
                             Image(systemName: "gamecontroller.fill")
                                 .font(.system(size: 16))
                                 .padding(10)
-                                .background(Color.blue)
-                                .foregroundColor(.white)
+                                .background(LeagueTheme.gold)
+                                .foregroundStyle(LeagueTheme.background)
                                 .clipShape(Circle())
                                 .shadow(radius: 4)
                         }
@@ -52,9 +53,9 @@ struct VenuesMapView: View {
                     VStack(alignment: .leading, spacing: 12) {
                         HStack {
                             VStack(alignment: .leading, spacing: 4) {
-                                Text(venue.type).font(.caption).bold().foregroundColor(.blue)
-                                Text(venue.name).font(.title3).bold()
-                                Text(venue.address).font(.subheadline).foregroundColor(.secondary)
+                                Text(venue.type).font(.caption.weight(.bold)).foregroundStyle(LeagueTheme.cyan)
+                                Text(venue.name).font(.title3.weight(.bold)).foregroundStyle(LeagueTheme.text)
+                                Text(venue.address).font(.subheadline).foregroundStyle(LeagueTheme.muted)
                             }
                             Spacer()
                             Button(action: {
@@ -62,8 +63,9 @@ struct VenuesMapView: View {
                             }) {
                                 Image(systemName: "xmark.circle.fill")
                                     .font(.title2)
-                                    .foregroundColor(.secondary)
+                                    .foregroundStyle(LeagueTheme.muted)
                             }
+                            .accessibilityLabel("Fermer la fiche du lieu")
                         }
                         
                         // Calcul dynamique de la distance par rapport à l'utilisateur
@@ -75,7 +77,7 @@ struct VenuesMapView: View {
                             Text(String(format: "📍 À %.1f km de votre position", distanceInKm))
                                 .font(.subheadline)
                                 .bold()
-                                .foregroundColor(.primary)
+                                .foregroundStyle(LeagueTheme.text)
                         }
                         
                         // BOUTON POUR LANCER LE GPS (APPLE PLANS)
@@ -90,20 +92,15 @@ struct VenuesMapView: View {
                                 Text("S'y rendre (Ouvrir Plans)")
                             }
                             .frame(maxWidth: .infinity)
-                            .padding()
-                            .background(Color.blue)
-                            .foregroundColor(.white)
-                            .cornerRadius(12)
-                            .bold()
                         }
+                        .buttonStyle(LeagueActionButtonStyle())
                     }
-                    .padding(20)
-                    .background(.regularMaterial)
-                    .cornerRadius(24)
-                    .shadow(radius: 10)
+                    .padding(LeagueTheme.Space.lg)
+                    .leagueSurface(radius: LeagueTheme.Corner.panel)
+                    .shadow(color: .black.opacity(0.28), radius: 14, y: 6)
                     .padding()
                     .transition(.move(edge: .bottom).combined(with: .opacity))
-                    .animation(.spring(), value: selectedVenueID)
+                    .animation(reduceMotion ? nil : .easeOut(duration: 0.22), value: selectedVenueID)
                 }
             }
             .navigationTitle("Lieux E-sport")
