@@ -82,9 +82,7 @@ struct CachedAsyncImage<Content: View, Placeholder: View>: View {
                 try? FileManager.default.createDirectory(at: folder, withIntermediateDirectories: true)
                 try? data.write(to: path, options: .atomic)
             }
-            let image = await Task.detached(priority: .utility) {
-                ImageCache.decoded(data, pointSize: maxDimension, scale: displayScale)
-            }.value
+            let image = ImageCache.decoded(data, pointSize: maxDimension, scale: displayScale)
             guard !Task.isCancelled else { return }
             guard let image else { failed = true; return }
             ImageCache.memory.setObject(image, forKey: key, cost: Int(image.size.width * image.size.height * 4))
