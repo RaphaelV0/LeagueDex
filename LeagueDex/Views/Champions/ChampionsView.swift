@@ -9,6 +9,7 @@ struct ChampionsView: View {
 
     @State private var randomChampion: DBChampion?
     @State private var isNavigatingFromShake = false
+    @State private var isDrawing = false
     @Environment(\.accessibilityReduceMotion) private var reduceMotion
 
     private let haptic = UIImpactFeedbackGenerator(style: .heavy)
@@ -88,7 +89,7 @@ struct ChampionsView: View {
                             .background(LeagueTheme.gold, in: Capsule())
                     }
                     .buttonStyle(.plain)
-                    .disabled(filteredChampions.isEmpty)
+                    .disabled(filteredChampions.isEmpty || isDrawing)
                     .accessibilityHint("Tire au sort un champion parmi les résultats")
                 }
                 .padding(.horizontal, LeagueTheme.Space.md)
@@ -136,7 +137,7 @@ struct ChampionsView: View {
                         Image(systemName: "dice.fill")
                             .foregroundStyle(LeagueTheme.gold)
                     }
-                    .disabled(filteredChampions.isEmpty)
+                    .disabled(filteredChampions.isEmpty || isDrawing)
                     .accessibilityLabel("Champion aléatoire ARAM")
                 }
                 ToolbarItem(placement: .navigationBarTrailing) {
@@ -173,12 +174,15 @@ struct ChampionsView: View {
     }
 
     private func selectRandomChampion() {
-        guard let chosen = filteredChampions.randomElement(), !isNavigatingFromShake else { return }
+        guard !isDrawing, !isNavigatingFromShake,
+              let chosen = filteredChampions.randomElement() else { return }
+        isDrawing = true
         haptic.impactOccurred(intensity: 1.0)
         randomChampion = chosen
         Task {
             await viewModel.loadDetails(for: chosen)
             isNavigatingFromShake = true
+            isDrawing = false
         }
     }
 }
