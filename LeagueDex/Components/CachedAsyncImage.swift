@@ -150,7 +150,8 @@ struct CachedAsyncImage<Content: View, Placeholder: View>: View {
         }
 
         do {
-            var data = await ImageDiskCache.shared.cachedData(for: url)
+            let diskData = await ImageDiskCache.shared.cachedData(for: url)
+            var data = diskData
             if data == nil {
                 let (download, response) = try await URLSession.shared.data(from: url)
                 guard let http = response as? HTTPURLResponse,
@@ -172,7 +173,7 @@ struct CachedAsyncImage<Content: View, Placeholder: View>: View {
             }
 
             // Only persist validated downloads. A corrupted file is never recached.
-            if await ImageDiskCache.shared.cachedData(for: url) == nil {
+            if diskData == nil {
                 await ImageDiskCache.shared.save(bytes, for: url)
             }
             guard !Task.isCancelled else { return }
