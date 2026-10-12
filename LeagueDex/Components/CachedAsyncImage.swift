@@ -93,7 +93,7 @@ private actor ImageDiskCache {
 
 /// Thumbnail generation is independent of the view's MainActor.
 private enum ImageDecoder {
-    nonisolated static func thumbnail(from data: Data, maxPixel: Int) -> UIImage? {
+    nonisolated static func thumbnail(from data: Data, maxPixel: Int) -> CGImage? {
         guard let source = CGImageSourceCreateWithData(data as CFData, nil) else { return nil }
         let options: [CFString: Any] = [
             kCGImageSourceCreateThumbnailFromImageAlways: true,
@@ -103,7 +103,7 @@ private enum ImageDecoder {
         ]
         guard let cgImage = CGImageSourceCreateThumbnailAtIndex(source, 0, options as CFDictionary)
         else { return nil }
-        return UIImage(cgImage: cgImage)
+        return cgImage
     }
 }
 
@@ -162,15 +162,18 @@ struct CachedAsyncImage<Content: View, Placeholder: View>: View {
                 data = download
             }
             guard let bytes = data, !Task.isCancelled else { return }
-            let image = await Task.detached(priority: .utility) {
+            let decodedImage = await Task.detached(priority: .utility) {
                 ImageDecoder.thumbnail(from: bytes, maxPixel: pixel)
             }.value
             guard !Task.isCancelled else { return }
-            guard let image else {
+            guard let decodedImage else {
                 await ImageDiskCache.shared.remove(url)
                 failed = true
                 return
             }
+
+            // Construct the lightweight UIKit wrapper on MainActor after decoding.
+            let image = UIImage(cgImage: decodedImage)
 
             // Only persist validated downloads. A corrupted file is never recached.
             if diskData == nil {
