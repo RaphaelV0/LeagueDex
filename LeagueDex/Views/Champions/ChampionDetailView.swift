@@ -15,6 +15,7 @@ struct ChampionDetailView: View {
         self.viewModel = viewModel
     }
 
+    @ScaledMetric(relativeTo: .largeTitle) private var scalableHeroHeight: CGFloat = 320
     @State private var selectedLevel: Double = 1
     @State private var selectedSpellTitle = ""
     @State private var selectedSpellDesc = ""
@@ -102,6 +103,7 @@ struct ChampionDetailView: View {
         GeometryReader { geometry in
             let minY = geometry.frame(in: .global).minY
             let stretch = max(0, minY)
+            let heroHeight = min(500, max(320, scalableHeroHeight))
 
             ZStack(alignment: .bottomLeading) {
                 CachedAsyncImage(url: champion.splashArtURL) { image in
@@ -110,12 +112,12 @@ struct ChampionDetailView: View {
                     LeagueSkeletonBlock(radius: LeagueTheme.Corner.large)
                 }
                     .imageDimension(500)
-                    .frame(width: geometry.size.width, height: 320 + stretch)
+                    .frame(width: geometry.size.width, height: heroHeight + stretch)
                     .clipped()
                     .offset(y: -stretch)
 
                 LeagueTheme.championGradient
-                    .frame(height: 320 + stretch)
+                    .frame(height: heroHeight + stretch)
                     .offset(y: -stretch)
 
                 VStack(alignment: .leading, spacing: LeagueTheme.Space.xs) {
@@ -131,7 +133,7 @@ struct ChampionDetailView: View {
                 .offset(y: -stretch)
             }
         }
-        .frame(height: 320)
+        .frame(height: min(500, max(320, scalableHeroHeight)))
         .accessibilityElement(children: .combine)
     }
 
