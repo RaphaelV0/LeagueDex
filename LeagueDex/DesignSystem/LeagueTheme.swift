@@ -101,6 +101,7 @@ struct LeagueFilterChip: View {
         .buttonStyle(LeagueCompactButtonStyle())
         .animation(reduceMotion ? nil : LeagueMotion.quick, value: isSelected)
         .accessibilityValue(isSelected ? "Sélectionné" : "Non sélectionné")
+        .accessibilityAddTraits(isSelected ? .isSelected : [])
     }
 }
 
