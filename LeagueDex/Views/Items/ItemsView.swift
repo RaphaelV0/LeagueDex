@@ -53,6 +53,7 @@ struct ItemsView: View {
     }
 
     var body: some View {
+        let visibleItems = filteredItems
         NavigationStack {
             VStack(spacing: 0) {
                 ScrollView(.horizontal, showsIndicators: false) {
@@ -72,7 +73,7 @@ struct ItemsView: View {
                 HStack {
                     VStack(alignment: .leading, spacing: LeagueTheme.Space.xs) {
                         Text("Armurerie").font(.headline).foregroundStyle(LeagueTheme.text)
-                        Text("\(filteredItems.count) objet(s)")
+                        Text("\(visibleItems.count) objet(s)")
                             .font(.caption).foregroundStyle(LeagueTheme.muted)
                     }
                     Spacer()
@@ -99,7 +100,7 @@ struct ItemsView: View {
                     } else if viewModel.isLoading && viewModel.items.isEmpty {
                         LeagueItemListSkeleton()
                             .leagueReveal()
-                    } else if filteredItems.isEmpty {
+                    } else if visibleItems.isEmpty {
                         VStack(spacing: LeagueTheme.Space.sm) {
                             LeagueEmptyState(
                                 title: "Aucun objet trouvé",
@@ -114,7 +115,7 @@ struct ItemsView: View {
                         }
                         .leagueReveal()
                     } else {
-                        List(filteredItems) { item in
+                        List(visibleItems) { item in
                             NavigationLink(destination: ItemDetailView(item: item)) {
                                 HStack(spacing: LeagueTheme.Space.md) {
                                     CachedAsyncImage(url: item.iconURL) { image in
@@ -141,6 +142,8 @@ struct ItemsView: View {
                                 }
                                 .padding(.vertical, LeagueTheme.Space.xs)
                             }
+                            .accessibilityLabel("\(item.name), \(item.totalCost) pièces d'or. \(item.plaintext)")
+                            .accessibilityHint("Ouvrir la fiche de l'objet")
                             .listRowBackground(LeagueTheme.surface)
                             .listRowSeparatorTint(LeagueTheme.border)
                         }
