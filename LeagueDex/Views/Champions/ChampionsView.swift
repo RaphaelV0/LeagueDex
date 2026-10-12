@@ -38,6 +38,7 @@ struct ChampionsView: View {
     }
 
     var body: some View {
+        let visibleChampions = filteredChampions
         NavigationStack {
             VStack(spacing: 0) {
                 ScrollView(.horizontal, showsIndicators: false) {
@@ -64,7 +65,7 @@ struct ChampionsView: View {
                         Text("Champions")
                             .font(.headline)
                             .foregroundStyle(LeagueTheme.text)
-                        Text("\(filteredChampions.count) résultat(s)")
+                        Text("\(visibleChampions.count) résultat(s)")
                             .font(.caption)
                             .foregroundStyle(LeagueTheme.muted)
                     }
@@ -79,6 +80,7 @@ struct ChampionsView: View {
                             .frame(minHeight: 44)
                     }
                     .accessibilityLabel("Trier les champions")
+                    .accessibilityValue(sortDescending ? "Nom Z à A" : "Nom A à Z")
 
                     Button(action: selectRandomChampion) {
                         Label(isDrawing ? "Tirage…" : "ARAM", systemImage: "dice.fill")
@@ -89,7 +91,7 @@ struct ChampionsView: View {
                             .background(LeagueTheme.gold, in: Capsule())
                     }
                     .buttonStyle(LeagueCompactButtonStyle())
-                    .disabled(filteredChampions.isEmpty || isDrawing)
+                    .disabled(visibleChampions.isEmpty || isDrawing)
                     .accessibilityHint("Tire au sort un champion parmi les résultats")
                 }
                 .padding(.horizontal, LeagueTheme.Space.md)
@@ -103,7 +105,7 @@ struct ChampionsView: View {
                     } else if viewModel.isLoading && viewModel.champions.isEmpty {
                         LeagueChampionGridSkeleton()
                             .leagueReveal()
-                    } else if filteredChampions.isEmpty {
+                    } else if visibleChampions.isEmpty {
                         VStack(spacing: LeagueTheme.Space.sm) {
                             LeagueEmptyState(
                                 title: "Aucun champion trouvé",
@@ -119,11 +121,12 @@ struct ChampionsView: View {
                         .leagueReveal()
                     } else {
                         LazyVGrid(columns: gridColumns, spacing: LeagueTheme.Space.md) {
-                            ForEach(filteredChampions) { champion in
+                            ForEach(visibleChampions) { champion in
                                 NavigationLink(destination: ChampionDetailView(champion: champion, viewModel: viewModel)) {
                                     ChampionCard(champion: champion)
                                 }
                                 .buttonStyle(LeagueCompactButtonStyle())
+                                .accessibilityHint("Ouvrir la fiche de ce champion")
                             }
                         }
                         .padding(LeagueTheme.Space.md)
@@ -139,7 +142,7 @@ struct ChampionsView: View {
                         Image(systemName: "dice.fill")
                             .foregroundStyle(LeagueTheme.gold)
                     }
-                    .disabled(filteredChampions.isEmpty || isDrawing)
+                    .disabled(visibleChampions.isEmpty || isDrawing)
                     .accessibilityLabel("Champion aléatoire ARAM")
                 }
                 ToolbarItem(placement: .navigationBarTrailing) {
