@@ -121,7 +121,17 @@ class ChampionViewModel: ObservableObject {
                 updatedChamp.fullLore = details.lore
                 updatedChamp.isDetailLoaded = true
                 
-                try db.collection("champions").document(champion.id).setData(from: updatedChamp, merge: true)
+                try await db.collection("champions").document(champion.id).updateData([
+                    "allyTips": updatedChamp.allyTips,
+                    "enemyTips": updatedChamp.enemyTips,
+                    "skins": updatedChamp.skins.map { ["name": $0.name, "num": $0.num, "championId": $0.championId] as [String: Any] },
+                    "spells": updatedChamp.spells.map { ["id": $0.id, "name": $0.name, "desc": $0.desc] },
+                    "passiveName": updatedChamp.passiveName,
+                    "passiveDesc": updatedChamp.passiveDesc,
+                    "passiveImage": updatedChamp.passiveImage,
+                    "fullLore": updatedChamp.fullLore,
+                    "isDetailLoaded": true
+                ])
             }
         } catch {
             print("Erreur de chargement des détails : \(error)")
