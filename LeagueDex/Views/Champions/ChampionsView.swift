@@ -189,7 +189,6 @@ struct ChampionsView: View {
                     }
                 }
             }
-            .contentMargins(.trailing, LeagueTheme.Space.sm, for: .scrollContent)
         }
     }
 
