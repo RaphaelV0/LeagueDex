@@ -147,3 +147,47 @@ struct LeagueLoadingState: View {
         .accessibilityElement(children: .combine)
     }
 }
+
+struct LeagueEmptyState: View {
+    let title: String
+    let detail: String
+    var icon = "magnifyingglass"
+
+    var body: some View {
+        VStack(spacing: LeagueTheme.Space.md) {
+            Image(systemName: icon)
+                .font(.system(size: 38, weight: .light))
+                .foregroundStyle(LeagueTheme.gold)
+                .accessibilityHidden(true)
+            Text(title)
+                .font(.title3.weight(.bold))
+                .foregroundStyle(LeagueTheme.text)
+            Text(detail)
+                .font(.subheadline)
+                .foregroundStyle(LeagueTheme.muted)
+        }
+        .multilineTextAlignment(.center)
+        .frame(maxWidth: .infinity)
+        .padding(LeagueTheme.Space.lg)
+        .accessibilityElement(children: .combine)
+    }
+}
+
+struct LeagueErrorState: View {
+    let message: String
+    let retry: () -> Void
+
+    var body: some View {
+        VStack(spacing: LeagueTheme.Space.md) {
+            LeagueEmptyState(
+                title: "Chargement impossible",
+                detail: message,
+                icon: "wifi.exclamationmark"
+            )
+            Button("Réessayer", action: retry)
+                .buttonStyle(LeagueActionButtonStyle())
+                .padding(.horizontal, LeagueTheme.Space.lg)
+        }
+        .frame(maxWidth: .infinity)
+    }
+}
