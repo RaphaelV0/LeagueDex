@@ -109,6 +109,7 @@ struct ChampionDetailView: View {
                 } placeholder: {
                     LeagueSkeletonBlock(radius: LeagueTheme.Corner.large)
                 }
+                    .imageDimension(500)
                     .frame(width: geometry.size.width, height: 320 + stretch)
                     .clipped()
                     .offset(y: -stretch)
@@ -336,6 +337,7 @@ struct ChampionDetailView: View {
                             CachedAsyncImage(url: skin.url) { image in
                                 image.resizable().scaledToFill()
                             } placeholder: { LeagueTheme.elevated }
+                            .imageDimension(310)
                             .frame(width: 260, height: 160)
                             .clipped()
 
