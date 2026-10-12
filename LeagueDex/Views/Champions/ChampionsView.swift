@@ -11,6 +11,8 @@ struct ChampionsView: View {
     @State private var showOnlyFavorites = false
     @State private var sortDescending = false
     @State private var navigationPath: [String] = []
+    @State private var selectedARAMChampionID: String?
+    @State private var isShowingARAM = false
     @State private var lastShakeAt: Date = .distantPast
 
     @Environment(\.accessibilityReduceMotion) private var reduceMotion
@@ -144,6 +146,39 @@ struct ChampionsView: View {
             guard isActive else { return }
             drawARAMFromCurrentPage()
         }
+        // A single full-screen presentation avoids replacing a NavigationStack
+        // destination while an interactive push/pop animation is still running.
+        .fullScreenCover(isPresented: $isShowingARAM, onDismiss: {
+            selectedARAMChampionID = nil
+        }) {
+            NavigationStack {
+                if let selectedARAMChampionID,
+                   let champion = viewModel.champions.first(where: { $0.id == selectedARAMChampionID }) {
+                    ChampionDetailView(champion: champion, viewModel: viewModel)
+                        .id(selectedARAMChampionID)
+                        .toolbar {
+                            ToolbarItem(placement: .topBarLeading) {
+                                Button {
+                                    isShowingARAM = false
+                                } label: {
+                                    Label("Fermer ARAM", systemImage: "xmark")
+                                }
+                                .accessibilityLabel("Fermer le mode ARAM et revenir au catalogue")
+                            }
+                        }
+                } else {
+                    LeagueLoadingState(message: "Ouverture du champion…")
+                }
+            }
+            .tint(LeagueTheme.gold)
+            .background(LeagueTheme.background)
+            // Handle shakes from the presented screen as well. Both observers
+            // may receive an event; the debouncer permits only one reroll.
+            .onShake {
+                guard isActive else { return }
+                drawARAMFromCurrentPage()
+            }
+        }
     }
 
     private var aramFeature: some View {
@@ -200,7 +235,7 @@ struct ChampionsView: View {
         let now = Date()
         guard now.timeIntervalSince(lastShakeAt) > 0.8 else { return }
 
-        let currentChampionID = navigationPath.last
+        let currentChampionID = selectedARAMChampionID ?? navigationPath.last
         let candidates: [DBChampion]
         if let currentChampionID {
             // Within a detail, ARAM can select any champion except the current one.
@@ -213,8 +248,17 @@ struct ChampionsView: View {
         guard let chosen = candidates.randomElement() else { return }
         lastShakeAt = now
         UIImpactFeedbackGenerator(style: .medium).impactOccurred()
-        // Never stack earlier ARAM draws: the only destination is the newest champion.
-        // Back always returns directly to the Champions catalog.
-        navigationPath = [chosen.id]
+        // Keep only the last ARAM champion: changing the identity of the
+        // full-screen content resets its scroll and image/layout state.
+        // Dismissal returns to the catalog rather than previous champion cards.
+        var noAnimation = Transaction()
+        noAnimation.disablesAnimations = true
+        withTransaction(noAnimation) {
+            navigationPath.removeAll()
+            selectedARAMChampionID = chosen.id
+        }
+        if !isShowingARAM {
+            isShowingARAM = true
+        }
     }
 }
