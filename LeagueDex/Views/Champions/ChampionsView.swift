@@ -123,7 +123,7 @@ struct ChampionsView: View {
                                 NavigationLink(destination: ChampionDetailView(champion: champion, viewModel: viewModel)) {
                                     ChampionCard(champion: champion)
                                 }
-                                .buttonStyle(.plain)
+                                .buttonStyle(LeagueCompactButtonStyle())
                             }
                         }
                         .padding(LeagueTheme.Space.md)
