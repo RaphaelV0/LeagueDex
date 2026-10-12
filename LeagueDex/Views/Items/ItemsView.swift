@@ -93,8 +93,10 @@ struct ItemsView: View {
                 Group {
                     if let message = viewModel.errorMessage, viewModel.items.isEmpty {
                         LeagueErrorState(message: message) { viewModel.fetchItemsFromFirebase() }
+                            .leagueReveal()
                     } else if viewModel.isLoading && viewModel.items.isEmpty {
-                        LeagueLoadingState(message: "Chargement de l'armurerie...")
+                        LeagueItemListSkeleton()
+                            .leagueReveal()
                     } else if filteredItems.isEmpty {
                         VStack(spacing: LeagueTheme.Space.sm) {
                             LeagueEmptyState(
@@ -108,6 +110,7 @@ struct ItemsView: View {
                             .buttonStyle(LeagueActionButtonStyle(prominent: false))
                             .padding(.horizontal, LeagueTheme.Space.lg)
                         }
+                        .leagueReveal()
                     } else {
                         List(filteredItems) { item in
                             NavigationLink(destination: ItemDetailView(item: item)) {
@@ -167,6 +170,7 @@ struct ItemDetailView: View {
                     RoundedRectangle(cornerRadius: LeagueTheme.Corner.large)
                         .strokeBorder(LeagueTheme.border, lineWidth: 1)
                 }
+                .leagueReveal()
 
                 VStack(spacing: LeagueTheme.Space.sm) {
                     Text(item.name)
@@ -187,6 +191,7 @@ struct ItemDetailView: View {
                         PriceBox(title: "Revente", price: item.sellPrice)
                     }
                 }
+                .leagueReveal()
 
                 VStack(alignment: .leading, spacing: LeagueTheme.Space.md) {
                     LeagueSectionHeader(title: "Statistiques & Passifs")
@@ -197,6 +202,7 @@ struct ItemDetailView: View {
                         .padding(LeagueTheme.Space.md)
                         .leagueSurface()
                 }
+                .leagueReveal()
             }
             .padding(LeagueTheme.Space.md)
             .padding(.bottom, LeagueTheme.Space.lg)
