@@ -21,7 +21,11 @@ struct ItemsView: View {
         NavigationStack {
             Group {
                 if let message = viewModel.errorMessage, viewModel.items.isEmpty {
-                    ContentUnavailableView(message, systemImage: "wifi.exclamationmark", description: Text("Vérifiez votre connexion puis réessayez."))
+                    VStack(spacing: 16) {
+                        ContentUnavailableView(message, systemImage: "wifi.exclamationmark", description: Text("Vérifiez votre connexion puis réessayez."))
+                        Button("Réessayer") { viewModel.fetchItemsFromFirebase() }
+                            .buttonStyle(.borderedProminent)
+                    }
                 } else if viewModel.isLoading && viewModel.items.isEmpty {
                     VStack(spacing: 20) {
                         ProgressView().scaleEffect(1.5)
