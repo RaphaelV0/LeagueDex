@@ -2,6 +2,7 @@ import SwiftUI
 
 struct SpellIcon: View {
     let url: URL?
+    @ScaledMetric(relativeTo: .body) private var scaledSize: CGFloat = 50
 
     var body: some View {
         CachedAsyncImage(url: url) { image in
@@ -10,7 +11,8 @@ struct SpellIcon: View {
             LeagueTheme.elevated
                 .overlay { Image(systemName: "sparkles").foregroundStyle(LeagueTheme.muted) }
         }
-        .frame(width: 50, height: 50)
+        .imageDimension(80)
+        .frame(width: min(76, max(50, scaledSize)), height: min(76, max(50, scaledSize)))
         .clipShape(RoundedRectangle(cornerRadius: LeagueTheme.Corner.medium))
         .overlay {
             RoundedRectangle(cornerRadius: LeagueTheme.Corner.medium)
