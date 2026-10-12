@@ -2,78 +2,130 @@ import SwiftUI
 
 struct ChampionsView: View {
     @StateObject private var viewModel = ChampionViewModel()
-    
     @State private var searchText = ""
-    @State private var selectedRole: String = "Tous"
+    @State private var selectedRole = "Tous"
     @State private var showOnlyFavorites = false
-    
+    @State private var sortDescending = false
+
     @State private var randomChampion: DBChampion?
     @State private var isNavigatingFromShake = false
-    
-    let haptic = UIImpactFeedbackGenerator(style: .heavy)
-    let roles = [
+    @Environment(\.accessibilityReduceMotion) private var reduceMotion
+
+    private let haptic = UIImpactFeedbackGenerator(style: .heavy)
+    private let roles = [
         ("Tous", "Tous"), ("Assassin", "Assassin"), ("Combattant", "Fighter"),
         ("Mage", "Mage"), ("Tireur", "Marksman"), ("Support", "Support"), ("Tank", "Tank")
     ]
-    let gridColumns = [GridItem(.flexible(), spacing: 16), GridItem(.flexible(), spacing: 16)]
-    
-    var filteredChampions: [DBChampion] {
-        viewModel.champions.filter { champ in
-            let matchesSearch = searchText.isEmpty || champ.name.localizedCaseInsensitiveContains(searchText)
-            let matchesRole = selectedRole == "Tous" || champ.tags.contains(selectedRole)
-            let matchesFavorite = !showOnlyFavorites || champ.isFavorite
+    private let gridColumns = [GridItem(.adaptive(minimum: 148, maximum: 240), spacing: 12)]
+
+    private var filteredChampions: [DBChampion] {
+        let matches = viewModel.champions.filter { champion in
+            let matchesSearch = searchText.isEmpty
+                || champion.name.localizedStandardContains(searchText)
+            let matchesRole = selectedRole == "Tous" || champion.tags.contains(selectedRole)
+            let matchesFavorite = !showOnlyFavorites || champion.isFavorite
             return matchesSearch && matchesRole && matchesFavorite
         }
+        return matches.sorted {
+            let order = $0.name.localizedStandardCompare($1.name)
+            return sortDescending ? order == .orderedDescending : order == .orderedAscending
+        }
     }
-    
+
+    private var hasActiveFilters: Bool {
+        selectedRole != "Tous" || showOnlyFavorites || !searchText.isEmpty
+    }
+
     var body: some View {
         NavigationStack {
             VStack(spacing: 0) {
-                // 1. BARRE DE FILTRES
                 ScrollView(.horizontal, showsIndicators: false) {
-                    HStack(spacing: 12) {
-                        ForEach(roles, id: \.1) { roleUI, roleTag in
-                            LeagueFilterChip(title: roleUI, isSelected: selectedRole == roleTag) {
+                    HStack(spacing: LeagueTheme.Space.sm) {
+                        ForEach(roles, id: \.1) { title, tag in
+                            LeagueFilterChip(title: title, isSelected: selectedRole == tag) {
                                 haptic.impactOccurred(intensity: 0.5)
-                                withAnimation(.easeOut(duration: LeagueTheme.pressDuration)) {
-                                    selectedRole = roleTag
+                                withAnimation(reduceMotion ? nil : .easeOut(duration: LeagueTheme.pressDuration)) {
+                                    selectedRole = tag
                                 }
                             }
                         }
                     }
-                    .padding(.horizontal, 16).padding(.vertical, 12)
+                    .padding(.horizontal, LeagueTheme.Space.md)
+                    .padding(.vertical, LeagueTheme.Space.sm)
                 }
                 .background(LeagueTheme.surface)
-                .overlay(alignment: .bottom) { LeagueTheme.border.frame(height: 1) }
-                .zIndex(1)
-                
-                // 2. CONTENU DE LA GRILLE
+                .overlay(alignment: .bottom) {
+                    LeagueTheme.border.frame(height: 1)
+                }
+
+                HStack(spacing: LeagueTheme.Space.sm) {
+                    VStack(alignment: .leading, spacing: LeagueTheme.Space.xs) {
+                        Text("Champions")
+                            .font(.headline)
+                            .foregroundStyle(LeagueTheme.text)
+                        Text("\(filteredChampions.count) résultat(s)")
+                            .font(.caption)
+                            .foregroundStyle(LeagueTheme.muted)
+                    }
+                    Spacer(minLength: 4)
+                    Menu {
+                        Button("Nom : A à Z") { sortDescending = false }
+                        Button("Nom : Z à A") { sortDescending = true }
+                    } label: {
+                        Label("Trier", systemImage: "arrow.up.arrow.down")
+                            .font(.subheadline.weight(.semibold))
+                            .foregroundStyle(LeagueTheme.gold)
+                            .frame(minHeight: 44)
+                    }
+                    .accessibilityLabel("Trier les champions")
+
+                    Button(action: selectRandomChampion) {
+                        Label("ARAM", systemImage: "dice.fill")
+                            .font(.subheadline.weight(.bold))
+                            .padding(.horizontal, LeagueTheme.Space.md)
+                            .frame(minHeight: 44)
+                            .foregroundStyle(LeagueTheme.background)
+                            .background(LeagueTheme.gold, in: Capsule())
+                    }
+                    .buttonStyle(.plain)
+                    .disabled(filteredChampions.isEmpty)
+                    .accessibilityHint("Tire au sort un champion parmi les résultats")
+                }
+                .padding(.horizontal, LeagueTheme.Space.md)
+                .padding(.vertical, LeagueTheme.Space.sm)
+
                 ScrollView {
                     if let message = viewModel.errorMessage, viewModel.champions.isEmpty {
                         LeagueErrorState(message: message) { viewModel.fetchChampionsFromFirebase() }
-                            .padding(.top, 60)
+                            .padding(.top, LeagueTheme.Space.lg)
                     } else if viewModel.isLoading && viewModel.champions.isEmpty {
                         LeagueLoadingState(message: "Synchronisation des champions...")
-                        .padding(.top, 120)
-                    } else if filteredChampions.isEmpty && !viewModel.champions.isEmpty {
-                        LeagueEmptyState(
-                            title: "Aucun champion trouvé",
-                            detail: "Essayez un autre nom ou modifiez les filtres."
-                        )
-                        .padding(.top, 100)
+                            .padding(.top, 100)
+                    } else if filteredChampions.isEmpty {
+                        VStack(spacing: LeagueTheme.Space.sm) {
+                            LeagueEmptyState(
+                                title: "Aucun champion trouvé",
+                                detail: "Essayez un autre nom ou modifiez les filtres."
+                            )
+                            if hasActiveFilters {
+                                Button("Effacer les filtres", action: resetFilters)
+                                    .buttonStyle(LeagueActionButtonStyle(prominent: false))
+                                    .padding(.horizontal, LeagueTheme.Space.lg)
+                            }
+                        }
+                        .padding(.top, 48)
                     } else {
-                        LazyVGrid(columns: gridColumns, spacing: 16) {
+                        LazyVGrid(columns: gridColumns, spacing: LeagueTheme.Space.md) {
                             ForEach(filteredChampions) { champion in
                                 NavigationLink(destination: ChampionDetailView(champion: champion, viewModel: viewModel)) {
                                     ChampionCard(champion: champion)
                                 }
-                                .buttonStyle(PlainButtonStyle())
+                                .buttonStyle(.plain)
                             }
                         }
-                        .padding(16)
+                        .padding(LeagueTheme.Space.md)
                     }
                 }
-                .background(LeagueTheme.background)
             }
             .background(LeagueTheme.background)
             .navigationTitle("LeagueDex")
@@ -86,21 +138,20 @@ struct ChampionsView: View {
                     }
                     .disabled(filteredChampions.isEmpty)
                     .accessibilityLabel("Champion aléatoire ARAM")
-                    .accessibilityHint("Tire au sort un champion parmi les filtres actifs")
                 }
                 ToolbarItem(placement: .navigationBarTrailing) {
-                    Button(action: {
+                    Button {
                         haptic.impactOccurred(intensity: 0.5)
-                        withAnimation { showOnlyFavorites.toggle() }
-                    }) {
+                        withAnimation(reduceMotion ? nil : .easeOut(duration: LeagueTheme.pressDuration)) {
+                            showOnlyFavorites.toggle()
+                        }
+                    } label: {
                         Image(systemName: showOnlyFavorites ? "heart.fill" : "heart")
-                            .foregroundColor(showOnlyFavorites ? LeagueTheme.danger : LeagueTheme.gold)
-                            .accessibilityLabel(showOnlyFavorites ? "Afficher tous les champions" : "Afficher les favoris")
-                            .font(.title3)
+                            .foregroundStyle(showOnlyFavorites ? LeagueTheme.danger : LeagueTheme.gold)
                     }
+                    .accessibilityLabel(showOnlyFavorites ? "Afficher tous les champions" : "Afficher les favoris")
                 }
             }
-            // NAVIGATION FIXE POUR L'ARAM
             .background(
                 NavigationLink(
                     destination: Group {
@@ -109,21 +160,24 @@ struct ChampionsView: View {
                         }
                     },
                     isActive: $isNavigatingFromShake
-                ) {
-                    EmptyView()
-                }
+                ) { EmptyView() }
             )
-            // DÉTECTEUR DE SECOUSSE (ARAM)
             .onShake { selectRandomChampion() }
         }
     }
 
+    private func resetFilters() {
+        searchText = ""
+        selectedRole = "Tous"
+        showOnlyFavorites = false
+    }
+
     private func selectRandomChampion() {
-        guard let chosenChampion = filteredChampions.randomElement() else { return }
+        guard let chosen = filteredChampions.randomElement(), !isNavigatingFromShake else { return }
         haptic.impactOccurred(intensity: 1.0)
-        randomChampion = chosenChampion
+        randomChampion = chosen
         Task {
-            await viewModel.loadDetails(for: chosenChampion)
+            await viewModel.loadDetails(for: chosen)
             isNavigatingFromShake = true
         }
     }
