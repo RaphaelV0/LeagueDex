@@ -1,67 +1,149 @@
 import SwiftUI
 
+private enum ItemPriceFilter: String, CaseIterable, Identifiable {
+    case all = "Tous"
+    case budget = "1–1500"
+    case medium = "1501–3000"
+    case premium = "3000+"
+
+    var id: Self { self }
+
+    func includes(_ price: Int) -> Bool {
+        switch self {
+        case .all: return true
+        case .budget: return price <= 1500
+        case .medium: return price > 1500 && price <= 3000
+        case .premium: return price > 3000
+        }
+    }
+}
+
+private enum ItemSortOrder: String {
+    case expensive = "Prix décroissant"
+    case affordable = "Prix croissant"
+    case name = "Nom A–Z"
+}
+
 struct ItemsView: View {
     @StateObject private var viewModel = ItemViewModel()
     @State private var searchText = ""
+    @State private var priceFilter: ItemPriceFilter = .all
+    @State private var sortOrder: ItemSortOrder = .expensive
 
-    var filteredItems: [DBItem] {
-        if searchText.isEmpty { return viewModel.items }
-        return viewModel.items.filter { $0.name.localizedCaseInsensitiveContains(searchText) }
+    private var filteredItems: [DBItem] {
+        let matches = viewModel.items.filter { item in
+            let matchesText = searchText.isEmpty
+                || item.name.localizedStandardContains(searchText)
+                || item.plaintext.localizedStandardContains(searchText)
+            return matchesText && priceFilter.includes(item.totalCost)
+        }
+        return matches.sorted { lhs, rhs in
+            switch sortOrder {
+            case .expensive:
+                return lhs.totalCost == rhs.totalCost
+                    ? lhs.name < rhs.name : lhs.totalCost > rhs.totalCost
+            case .affordable:
+                return lhs.totalCost == rhs.totalCost
+                    ? lhs.name < rhs.name : lhs.totalCost < rhs.totalCost
+            case .name:
+                return lhs.name.localizedStandardCompare(rhs.name) == .orderedAscending
+            }
+        }
     }
 
     var body: some View {
         NavigationStack {
-            Group {
-                if let message = viewModel.errorMessage, viewModel.items.isEmpty {
-                    LeagueErrorState(message: message) { viewModel.fetchItemsFromFirebase() }
-                } else if viewModel.isLoading && viewModel.items.isEmpty {
-                    LeagueLoadingState(message: "Chargement de l'armurerie...")
-                } else if filteredItems.isEmpty {
-                    LeagueEmptyState(
-                        title: "Aucun objet trouvé",
-                        detail: "Essayez un autre nom d'objet."
-                    )
-                } else {
-                    List(filteredItems) { item in
-                        NavigationLink(destination: ItemDetailView(item: item)) {
-                            HStack(spacing: LeagueTheme.Space.md) {
-                                CachedAsyncImage(url: item.iconURL) { image in
-                                    image.resizable().scaledToFit()
-                                } placeholder: {
-                                    LeagueTheme.elevated
-                                }
-                                .frame(width: 48, height: 48)
-                                .clipShape(RoundedRectangle(cornerRadius: LeagueTheme.Corner.small))
-                                .accessibilityHidden(true)
-
-                                VStack(alignment: .leading, spacing: LeagueTheme.Space.xs) {
-                                    Text(item.name)
-                                        .font(.headline)
-                                        .foregroundStyle(LeagueTheme.text)
-
-                                    Text(item.plaintext)
-                                        .font(.caption)
-                                        .foregroundStyle(LeagueTheme.muted)
-                                        .lineLimit(2)
-                                }
-
-                                Spacer(minLength: 0)
-
-                                Label(item.totalCost.formatted(), systemImage: "circle.hexagongrid.fill")
-                                    .font(.subheadline.weight(.semibold))
-                                    .foregroundStyle(LeagueTheme.gold)
-                                    .labelStyle(.titleAndIcon)
+            VStack(spacing: 0) {
+                ScrollView(.horizontal, showsIndicators: false) {
+                    HStack(spacing: LeagueTheme.Space.sm) {
+                        ForEach(ItemPriceFilter.allCases) { filter in
+                            LeagueFilterChip(title: filter.rawValue, isSelected: priceFilter == filter) {
+                                priceFilter = filter
                             }
-                            .padding(.vertical, LeagueTheme.Space.xs)
                         }
-                        .listRowBackground(LeagueTheme.surface)
-                        .listRowSeparatorTint(LeagueTheme.border)
                     }
-                    .listStyle(.plain)
-                    .scrollContentBackground(.hidden)
+                    .padding(.horizontal, LeagueTheme.Space.md)
+                    .padding(.vertical, LeagueTheme.Space.sm)
                 }
+                .background(LeagueTheme.surface)
+
+                HStack {
+                    VStack(alignment: .leading, spacing: LeagueTheme.Space.xs) {
+                        Text("Armurerie").font(.headline).foregroundStyle(LeagueTheme.text)
+                        Text("\(filteredItems.count) objet(s)")
+                            .font(.caption).foregroundStyle(LeagueTheme.muted)
+                    }
+                    Spacer()
+                    Menu {
+                        Button(ItemSortOrder.expensive.rawValue) { sortOrder = .expensive }
+                        Button(ItemSortOrder.affordable.rawValue) { sortOrder = .affordable }
+                        Button(ItemSortOrder.name.rawValue) { sortOrder = .name }
+                    } label: {
+                        Label("Trier", systemImage: "arrow.up.arrow.down")
+                            .font(.subheadline.weight(.semibold))
+                            .foregroundStyle(LeagueTheme.gold)
+                            .frame(minHeight: 44)
+                    }
+                    .accessibilityLabel("Trier les objets")
+                    .accessibilityValue(sortOrder.rawValue)
+                }
+                .padding(.horizontal, LeagueTheme.Space.md)
+                .padding(.vertical, LeagueTheme.Space.sm)
+
+                Group {
+                    if let message = viewModel.errorMessage, viewModel.items.isEmpty {
+                        LeagueErrorState(message: message) { viewModel.fetchItemsFromFirebase() }
+                    } else if viewModel.isLoading && viewModel.items.isEmpty {
+                        LeagueLoadingState(message: "Chargement de l'armurerie...")
+                    } else if filteredItems.isEmpty {
+                        VStack(spacing: LeagueTheme.Space.sm) {
+                            LeagueEmptyState(
+                                title: "Aucun objet trouvé",
+                                detail: "Essayez un autre nom ou une autre gamme de prix."
+                            )
+                            Button("Effacer les filtres") {
+                                priceFilter = .all
+                                searchText = ""
+                            }
+                            .buttonStyle(LeagueActionButtonStyle(prominent: false))
+                            .padding(.horizontal, LeagueTheme.Space.lg)
+                        }
+                    } else {
+                        List(filteredItems) { item in
+                            NavigationLink(destination: ItemDetailView(item: item)) {
+                                HStack(spacing: LeagueTheme.Space.md) {
+                                    CachedAsyncImage(url: item.iconURL) { image in
+                                        image.resizable().scaledToFit()
+                                    } placeholder: { LeagueTheme.elevated }
+                                    .frame(width: 48, height: 48)
+                                    .clipShape(RoundedRectangle(cornerRadius: LeagueTheme.Corner.small))
+                                    .accessibilityHidden(true)
+
+                                    VStack(alignment: .leading, spacing: LeagueTheme.Space.xs) {
+                                        Text(item.name)
+                                            .font(.headline)
+                                            .foregroundStyle(LeagueTheme.text)
+                                        Text(item.plaintext)
+                                            .font(.caption)
+                                            .foregroundStyle(LeagueTheme.muted)
+                                            .lineLimit(2)
+                                    }
+                                    Spacer(minLength: LeagueTheme.Space.xs)
+                                    Label(item.totalCost.formatted(), systemImage: "circle.hexagongrid.fill")
+                                        .font(.subheadline.weight(.semibold))
+                                        .foregroundStyle(LeagueTheme.gold)
+                                }
+                                .padding(.vertical, LeagueTheme.Space.xs)
+                            }
+                            .listRowBackground(LeagueTheme.surface)
+                            .listRowSeparatorTint(LeagueTheme.border)
+                        }
+                        .listStyle(.plain)
+                        .scrollContentBackground(.hidden)
+                    }
+                }
+                .frame(maxWidth: .infinity, maxHeight: .infinity)
             }
-            .frame(maxWidth: .infinity, maxHeight: .infinity)
             .background(LeagueTheme.background)
             .navigationTitle("Armurerie")
             .searchable(text: $searchText, prompt: "Rechercher un objet...")
@@ -71,15 +153,14 @@ struct ItemsView: View {
 
 struct ItemDetailView: View {
     let item: DBItem
+    private let priceColumns = [GridItem(.adaptive(minimum: 100), spacing: 8)]
 
     var body: some View {
         ScrollView {
             VStack(spacing: LeagueTheme.Space.lg) {
                 CachedAsyncImage(url: item.iconURL) { image in
                     image.resizable().scaledToFit()
-                } placeholder: {
-                    LeagueTheme.elevated
-                }
+                } placeholder: { LeagueTheme.elevated }
                 .frame(width: 112, height: 112)
                 .clipShape(RoundedRectangle(cornerRadius: LeagueTheme.Corner.large))
                 .overlay {
@@ -92,17 +173,19 @@ struct ItemDetailView: View {
                         .font(.largeTitle.weight(.bold))
                         .foregroundStyle(LeagueTheme.text)
                         .multilineTextAlignment(.center)
-
                     Text(item.plaintext)
                         .font(.subheadline)
                         .foregroundStyle(LeagueTheme.muted)
                         .multilineTextAlignment(.center)
                 }
 
-                HStack(alignment: .top, spacing: LeagueTheme.Space.sm) {
-                    PriceBox(title: "Coût de base", price: item.baseCost)
-                    PriceBox(title: "Coût total", price: item.totalCost)
-                    PriceBox(title: "Revente", price: item.sellPrice)
+                VStack(alignment: .leading, spacing: LeagueTheme.Space.sm) {
+                    LeagueSectionHeader(title: "Coûts", subtitle: "Prix, composants et valeur de revente")
+                    LazyVGrid(columns: priceColumns, spacing: LeagueTheme.Space.sm) {
+                        PriceBox(title: "Coût de base", price: item.baseCost)
+                        PriceBox(title: "Coût total", price: item.totalCost)
+                        PriceBox(title: "Revente", price: item.sellPrice)
+                    }
                 }
 
                 VStack(alignment: .leading, spacing: LeagueTheme.Space.md) {
