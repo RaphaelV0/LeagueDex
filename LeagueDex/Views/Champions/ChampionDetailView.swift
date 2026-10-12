@@ -28,27 +28,33 @@ struct ChampionDetailView: View {
             ScrollView {
                 VStack(alignment: .leading, spacing: 0) {
                     hero
+                        .leagueReveal()
 
                     VStack(alignment: .leading, spacing: LeagueTheme.Space.lg) {
                         identity
                         sectionShortcuts(proxy: scrollProxy)
+                            .leagueReveal()
 
                         if champion.isDetailLoaded {
                             skillsSection
                                 .id("skills")
+                                .leagueReveal()
                         }
 
                         statsSection
                             .id("stats")
+                            .leagueReveal()
 
                         if !champion.allyTips.isEmpty || !champion.enemyTips.isEmpty {
                             tipsSection
                                 .id("tips")
+                                .leagueReveal()
                         }
 
                         if !champion.skins.isEmpty {
                             skinsSection
                                 .id("skins")
+                                .leagueReveal()
                         }
 
                         if !champion.fullLore.isEmpty {
@@ -227,9 +233,13 @@ struct ChampionDetailView: View {
                     Text(selectedSpellTitle)
                         .font(.headline)
                         .foregroundStyle(LeagueTheme.gold)
+                        .contentTransition(.opacity)
+                        .animation(reduceMotion ? nil : LeagueMotion.quick, value: selectedSpellTitle)
                     Text(selectedSpellDesc)
                         .font(.subheadline)
                         .foregroundStyle(LeagueTheme.muted)
+                        .contentTransition(.opacity)
+                        .animation(reduceMotion ? nil : LeagueMotion.quick, value: selectedSpellDesc)
                         .fixedSize(horizontal: false, vertical: true)
                 }
                 .padding(LeagueTheme.Space.md)
@@ -248,6 +258,11 @@ struct ChampionDetailView: View {
                     .font(.headline.monospacedDigit())
                     .foregroundStyle(LeagueTheme.gold)
             }
+
+            ProgressView(value: selectedLevel - 1, total: 17)
+                .tint(LeagueTheme.cyan)
+                .animation(reduceMotion ? nil : LeagueMotion.quick, value: selectedLevel)
+                .accessibilityHidden(true)
 
             HStack(spacing: LeagueTheme.Space.md) {
                 Button("1") { selectedLevel = 1 }
