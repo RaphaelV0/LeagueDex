@@ -55,7 +55,10 @@ struct ChampionsView: View {
                 
                 // 2. CONTENU DE LA GRILLE
                 ScrollView {
-                    if viewModel.isLoading && viewModel.champions.isEmpty {
+                    if let message = viewModel.errorMessage, viewModel.champions.isEmpty {
+                        ContentUnavailableView(message, systemImage: "wifi.exclamationmark", description: Text("Vérifiez votre connexion puis réessayez."))
+                            .padding(.top, 60)
+                    } else if viewModel.isLoading && viewModel.champions.isEmpty {
                         VStack(spacing: 20) {
                             ProgressView().scaleEffect(1.5)
                             Text("Synchronisation Firebase...").font(.headline).foregroundColor(.secondary)
