@@ -81,14 +81,14 @@ struct ChampionsView: View {
                     .accessibilityLabel("Trier les champions")
 
                     Button(action: selectRandomChampion) {
-                        Label("ARAM", systemImage: "dice.fill")
+                        Label(isDrawing ? "Tirage…" : "ARAM", systemImage: "dice.fill")
                             .font(.subheadline.weight(.bold))
                             .padding(.horizontal, LeagueTheme.Space.md)
                             .frame(minHeight: 44)
                             .foregroundStyle(LeagueTheme.background)
                             .background(LeagueTheme.gold, in: Capsule())
                     }
-                    .buttonStyle(.plain)
+                    .buttonStyle(LeagueCompactButtonStyle())
                     .disabled(filteredChampions.isEmpty || isDrawing)
                     .accessibilityHint("Tire au sort un champion parmi les résultats")
                 }
@@ -99,9 +99,10 @@ struct ChampionsView: View {
                     if let message = viewModel.errorMessage, viewModel.champions.isEmpty {
                         LeagueErrorState(message: message) { viewModel.fetchChampionsFromFirebase() }
                             .padding(.top, LeagueTheme.Space.lg)
+                            .leagueReveal()
                     } else if viewModel.isLoading && viewModel.champions.isEmpty {
-                        LeagueLoadingState(message: "Synchronisation des champions...")
-                            .padding(.top, 100)
+                        LeagueChampionGridSkeleton()
+                            .leagueReveal()
                     } else if filteredChampions.isEmpty {
                         VStack(spacing: LeagueTheme.Space.sm) {
                             LeagueEmptyState(
@@ -115,6 +116,7 @@ struct ChampionsView: View {
                             }
                         }
                         .padding(.top, 48)
+                        .leagueReveal()
                     } else {
                         LazyVGrid(columns: gridColumns, spacing: LeagueTheme.Space.md) {
                             ForEach(filteredChampions) { champion in
