@@ -68,7 +68,4 @@ final class LocationManager: NSObject, ObservableObject, CLLocationManagerDelega
         }
     }
 
-    deinit {
-        manager.stopUpdatingLocation()
-    }
 }
