@@ -10,7 +10,7 @@ struct DBItem: Codable, Identifiable, Hashable {
     var totalCost: Int
     var sellPrice: Int
     
-    var iconURL: URL? { URL(string: "https://ddragon.leagueoflegends.com/cdn/14.18.1/img/item/\(id).png") }
+    var iconURL: URL? { URL(string: "https://ddragon.leagueoflegends.com/cdn/\(DataDragon.version)/img/item/\(id).png") }
 }
 
 // MARK: - 2. MODÈLES API (RIOT GAMES)
