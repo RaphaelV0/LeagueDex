@@ -78,6 +78,7 @@ struct LeagueFilterChip: View {
     let title: String
     let isSelected: Bool
     let action: () -> Void
+    @Environment(\.accessibilityReduceMotion) private var reduceMotion
 
     var body: some View {
         Button(action: action) {
@@ -97,7 +98,8 @@ struct LeagueFilterChip: View {
                     )
                 }
         }
-        .buttonStyle(.plain)
+        .buttonStyle(LeagueCompactButtonStyle())
+        .animation(reduceMotion ? nil : LeagueMotion.quick, value: isSelected)
         .accessibilityValue(isSelected ? "Sélectionné" : "Non sélectionné")
     }
 }
