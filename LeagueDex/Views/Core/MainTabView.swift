@@ -32,7 +32,7 @@ struct MainTabView: View {
                 .tag(1)
             
             // 3ème Onglet : Carte des Lieux E-sport & LAN (NOUVEAU)
-            VenuesMapView()
+            VenuesMapView(uid: userData.uid)
                 .tabItem {
                     Label("Lieux", systemImage: "map.fill")
                 }
