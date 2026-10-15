@@ -23,11 +23,23 @@ struct VenueDraft {
 @MainActor
 final class VenueViewModel: ObservableObject {
     @Published private(set) var remoteVenues: [DBVenue] = []
+    @Published private(set) var proposals: [VenueProposal] = []
     @Published private(set) var errorMessage: String?
     @Published private(set) var isSaving = false
 
+    let uid: String
     private let db = Firestore.firestore()
     private var listener: ListenerRegistration?
+    private var proposalListener: ListenerRegistration?
+
+    /// One proposal per account per UTC day. Firestore rules verify this ID using
+    /// server time, so changing the device clock does not bypass the quota.
+    static func submissionKey(for date: Date = Date()) -> String {
+        var calendar = Calendar(identifier: .gregorian)
+        calendar.timeZone = TimeZone(secondsFromGMT: 0)!
+        let c = calendar.dateComponents([.year, .month, .day], from: date)
+        return "\(c.year ?? 0)-\(c.month ?? 0)-\(c.day ?? 0)"
+    }
 
     // Preserve the three locations already shipped with LeagueDex. Firestore entries
     // with the same name take precedence over bundled data.
@@ -54,23 +66,45 @@ final class VenueViewModel: ObservableObject {
         }
     }
 
-    init() {
-        listener = db.collection("venues").addSnapshotListener { [weak self] snapshot, error in
-            guard let self else { return }
-            if let error {
-                self.errorMessage = "Impossible de synchroniser les lieux : \(error.localizedDescription)"
-                return
+    init(uid: String) {
+        self.uid = uid
+        listener = db.collection("venues").addSnapshotListener { @Sendable [weak self] snapshot, error in
+            Task { @MainActor [weak self] in
+                guard let self else { return }
+                if let error {
+                    self.errorMessage = "Impossible de synchroniser les lieux : \(error.localizedDescription)"
+                    return
+                }
+                guard let snapshot else { return }
+                self.remoteVenues = snapshot.documents.compactMap {
+                    try? $0.data(as: DBVenue.self)
+                }
+                self.errorMessage = nil
             }
-            guard let snapshot else { return }
-            self.remoteVenues = snapshot.documents.compactMap {
-                try? $0.data(as: DBVenue.self)
-            }
-            self.errorMessage = nil
         }
+        proposalListener = db.collection("users").document(uid).collection("venueProposals")
+            .addSnapshotListener { @Sendable [weak self] snapshot, error in
+                Task { @MainActor [weak self] in
+                    guard let self else { return }
+                    if let error {
+                        self.errorMessage = "Historique des propositions indisponible : \(error.localizedDescription)"
+                        return
+                    }
+                    self.proposals = (snapshot?.documents ?? []).compactMap { doc in
+                        let fields = doc.data()
+                        guard let name = fields["name"] as? String,
+                              let address = fields["address"] as? String,
+                              let status = fields["status"] as? String else { return nil }
+                        return VenueProposal(id: doc.documentID, name: name, address: address, status: status,
+                            createdAt: (fields["createdAt"] as? Timestamp)?.dateValue())
+                    }.sorted { $0.id > $1.id }
+                }
+            }
     }
 
     deinit {
         listener?.remove()
+        proposalListener?.remove()
     }
 
     func addVenue(_ draft: VenueDraft, at coordinate: CLLocationCoordinate2D) async throws {
@@ -100,13 +134,17 @@ final class VenueViewModel: ObservableObject {
 
         func trimmed(_ value: String) -> String { value.trimmingCharacters(in: .whitespacesAndNewlines) }
 
+        // All user submissions require review. Only admins can write to the
+        // public venues catalog. Never optimistically display proposals as venues.
+        let key = Self.submissionKey()
         var data: [String: Any] = [
+            "authorUID": uid,
             "name": trimmed(draft.name),
             "address": trimmed(draft.address),
             "latitude": coordinate.latitude,
             "longitude": coordinate.longitude,
             "type": draft.type,
-            "source": "community",
+            "status": "pending",
             "createdAt": FieldValue.serverTimestamp()
         ]
         for (key, value) in [
@@ -118,8 +156,68 @@ final class VenueViewModel: ObservableObject {
             let clean = trimmed(value)
             if !clean.isEmpty { data[key] = clean }
         }
-        // Create a document with a unique Firestore ID; no local-only fake success.
-        try await db.collection("venues").document().setData(data)
+        // createDocument via transaction does not overwrite a previously accepted
+        // daily submission; offline duplicate attempts remain server protected.
+        let ref = db.collection("users").document(uid).collection("venueProposals").document(key)
+        let fields = data
+        try await db.runTransaction { transaction, errorPointer -> Any? in
+            do {
+                let previous = try transaction.getDocument(ref)
+                guard !previous.exists else {
+                    errorPointer?.pointee = VenueSubmissionError.dailyLimit as NSError
+                    return nil
+                }
+                transaction.setData(fields, forDocument: ref)
+                return true
+            } catch {
+                errorPointer?.pointee = error as NSError
+                return nil
+            }
+        }
+    }
+
+    func reportVenue(_ venue: DBVenue, reason: String) async throws {
+        guard let venueID = venue.id, !venueID.isEmpty else {
+            throw VenueSubmissionError.invalidLocation
+        }
+        let validReasons = ["Adresse incorrecte", "Établissement fermé", "Informations erronées", "Autre"]
+        guard validReasons.contains(reason) else { throw VenueSubmissionError.invalidLocation }
+        let key = "\(venueID)_\(Self.submissionKey())"
+        let ref = db.collection("users").document(uid).collection("venueReports").document(key)
+        try await db.runTransaction { transaction, errorPointer -> Any? in
+            do {
+                guard try !transaction.getDocument(ref).exists else {
+                    errorPointer?.pointee = VenueSubmissionError.alreadyReported as NSError
+                    return nil
+                }
+                transaction.setData([
+                    "authorUID": self.uid,
+                    "venueID": venueID,
+                    "reason": reason,
+                    "createdAt": FieldValue.serverTimestamp()
+                ], forDocument: ref)
+                return true
+            } catch {
+                errorPointer?.pointee = error as NSError
+                return nil
+            }
+        }
+    }
+}
+
+struct VenueProposal: Identifiable {
+    let id: String
+    let name: String
+    let address: String
+    let status: String
+    let createdAt: Date?
+
+    var statusLabel: String {
+        switch status {
+        case "approved": return "Accepté"
+        case "rejected": return "Refusé"
+        default: return "En attente de modération"
+        }
     }
 }
 
@@ -129,6 +227,8 @@ enum VenueSubmissionError: LocalizedError {
     case addressNotFound
     case duplicateLocation
     case textTooLong
+    case dailyLimit
+    case alreadyReported
 
     var errorDescription: String? {
         switch self {
@@ -137,6 +237,8 @@ enum VenueSubmissionError: LocalizedError {
         case .addressNotFound: return "Adresse introuvable. Ajoutez la ville et le pays, puis réessayez."
         case .duplicateLocation: return "Ce lieu existe déjà à cette adresse. Vérifiez la liste."
         case .textTooLong: return "Certains champs sont trop longs. Raccourcissez les informations."
+        case .dailyLimit: return "Tu as déjà proposé un lieu aujourd’hui. Réessaie demain (UTC)."
+        case .alreadyReported: return "Ce lieu a déjà été signalé aujourd’hui."
         }
     }
 }
