@@ -85,6 +85,67 @@ simulateur Debug **et** Release ont réussi sous Xcode 26.6 dans
 - Les images de questions n'annoncent pas la solution à VoiceOver ; les catégories
   textuelles sont proposées pour jouer sans reconnaissance visuelle.
 
+## Phase D — Carte communautaire avec modération (suite après interruption)
+
+- Les lieux publics restent dans `venues/{venueID}`. Lecture pour comptes
+  authentifiés ; **écriture réservée aux administrateurs** dotés d'un custom
+  claim `admin: true`, attribué uniquement côté Admin SDK.
+- Un utilisateur connecté crée une proposition sous
+  `users/{uid}/venueProposals/{YYYY-M-D}` (date en UTC, mois et jour sans
+  zéro initial). Les règles calculent la date depuis `request.time` :
+  **une seule proposition par compte et par jour UTC**, y compris en cas
+  de changement d'horloge sur l'iPhone. Les propositions sont immuables côté client.
+- Les coordonnées sont recherchées via Apple Plans et confirmées par l'utilisateur
+  avant soumission. Types, longueurs et coordonnées sont validés **dans les règles**.
+- Historique des propositions avec les statuts `pending`, `approved` ou
+  `rejected`. Seul un administrateur peut changer le statut et renseigner
+  `reviewedAt` / `reviewedBy`; le contenu de la proposition ne peut pas
+  être modifié lors de cette étape.
+- Un signalement par lieu et par jour UTC est autorisé sous
+  `users/{uid}/venueReports/{venueID}_{YYYY-M-D}`, avec motif énuméré.
+  Le signalement est privé et immuable ; les administrateurs peuvent le consulter.
+- Recherche de lieu par nom, ville ou adresse et filtres de distance 10/25/50/100 km
+  basés sur la position GPS si elle est autorisée.
+- Les lieux existants, la lecture Firestore en temps réel, les horaires fournis,
+  le téléphone, le site web et les itinéraires Apple Plans sont conservés.
+
+### Publication et modération — étapes côté Firebase
+
+1. Déployer après revue les nouvelles `firestore.rules` via Firebase CLI
+   depuis un environnement autorisé. Rien n'a été déployé en production.
+2. Consulter les `venueProposals` des comptes dans une console d'administration
+   sécurisée, un outil de confiance ou via Admin SDK ; éviter de manipuler
+   les données sensibles depuis un client public.
+3. Vérifier qu'un lieu est réel, que l'adresse et les horaires sont pertinents,
+   et qu'il n'existe pas déjà dans `venues`.
+4. Depuis un environnement administrateur, créer le document public
+   `venues/{venueID}` en recopiant **uniquement** les champs autorisés
+   du modèle `DBVenue` (nom, adresse, lat/lon, type et champs facultatifs).
+5. Marquer la proposition `approved` avec `reviewedAt` (timestamp serveur)
+   et `reviewedBy` (UID modérateur). En cas de refus, choisir `rejected`.
+   Le statut `approved` ne publie **pas automatiquement** le lieu.
+6. Les signalements sont à examiner par un modérateur ; seul celui-ci peut
+   corriger ou supprimer un lieu public.
+
+**Limite assumée :** le dépôt ne fournit pas encore de tableau de bord
+administrateur ni de Cloud Function de publication atomique. La modération
+reste une opération administrative manuelle à sécuriser avant diffusion.
+La date UTC et une proposition quotidienne limitent le spam sans remplacer
+une vraie politique anti-abus (App Check, vérification d'adresse, surveillance,
+quotas côté serveur et modération).
+
+### Recette de la phase D
+
+- [ ] Création avec compte A, apparition en « En attente de modération » dans
+      son historique, invisibilité sur la carte publique avant approbation.
+- [ ] Compte B : impossible de lire l'historique du compte A.
+- [ ] Deuxième proposition le même jour : refus serveur.
+- [ ] Modérateur : approbation/refus sans modification possible du contenu initial.
+- [ ] Vérifier la création publique du lieu via procédure administrateur.
+- [ ] Signalement d'un lieu : un par jour et par lieu, lecture privée.
+- [ ] Recherche/filtrage, GPS refusé, historique hors ligne, itinéraires Apple Plans.
+- [ ] Tests Firestore Emulator, compilation Xcode Debug/Release et tests iPhone.
+
 ## Configuration Firebase nécessaire
 
 1. Conserver le projet Firebase et le `GoogleService-Info.plist` actuels.
