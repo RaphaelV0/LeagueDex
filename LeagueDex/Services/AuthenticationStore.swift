@@ -18,7 +18,7 @@ final class AuthenticationStore: ObservableObject {
     /// Constructed by AppDelegate only after FirebaseApp.configure().
     init(auth: Auth) {
         self.auth = auth
-        listener = auth.addStateDidChangeListener { [weak self] _, _ in
+        listener = auth.addStateDidChangeListener { @Sendable [weak self] _, _ in
             Task { @MainActor [weak self] in
                 // Read the current state here instead of replaying a possibly stale callback.
                 self?.receiveCurrentUser()

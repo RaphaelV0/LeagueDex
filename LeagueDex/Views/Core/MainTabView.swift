@@ -5,6 +5,8 @@ struct MainTabView: View {
     @StateObject private var champions = ChampionViewModel()
     @StateObject private var items = ItemViewModel()
     @StateObject private var userData: UserDataStore
+    @StateObject private var daily = DailyChampionStore()
+    @StateObject private var quiz = QuizViewModel()
 
     init(uid: String) {
         _userData = StateObject(wrappedValue: UserDataStore(uid: uid))
@@ -41,6 +43,8 @@ struct MainTabView: View {
         .environmentObject(champions)
         .environmentObject(items)
         .environmentObject(userData)
+        .environmentObject(daily)
+        .environmentObject(quiz)
         .tint(LeagueTheme.gold)
         .toolbarBackground(LeagueTheme.surface, for: .tabBar)
         .toolbarBackground(.visible, for: .tabBar)

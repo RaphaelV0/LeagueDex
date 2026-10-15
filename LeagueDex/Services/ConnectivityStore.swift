@@ -9,7 +9,7 @@ final class ConnectivityStore: ObservableObject {
     private let monitor = NWPathMonitor()
 
     private init() {
-        monitor.pathUpdateHandler = { [weak self] path in
+        monitor.pathUpdateHandler = { @Sendable [weak self] path in
             let online = path.status == .satisfied
             Task { @MainActor [weak self] in self?.isOnline = online }
         }

@@ -58,7 +58,32 @@ Validation intermédiaire : neuf groupes de tests Firestore réussis localement 
 dans GitHub Actions ; revue statique B et absence de nouveaux listeners/réseau
 dans les vues compagnon. Six tests natifs de statistiques/inventaire et deux tests
 de migration de file locale ajoutés aux douze tests de politique de synchronisation
-et aux tests ARAM existants. Leur exécution est confiée à la CI macOS.
+et aux tests ARAM existants. Au commit `ba88777`, les tests natifs et les builds
+simulateur Debug **et** Release ont réussi sous Xcode 26.6 dans
+[la validation de phase B](https://github.com/RaphaelV0/LeagueDex/actions/runs/38747092310).
+
+## Phase C — Quiz et champion du jour
+
+- Six catégories : illustration, description, compétence/passif, objet, rôle et
+  statistiques de base. Les données viennent exclusivement des modèles déjà chargés.
+- Deux ou quatre choix selon la difficulté ; pas de génération si les données
+  ne permettent pas dix questions distinctes. Les compétences peuvent être
+  préchargées par lots limités à huit champions, uniquement à la demande.
+- Les choix n'ont pas de doublons de libellé ; les questions de rôles excluent les
+  autres rôles réels du même champion, et les questions statistiques refusent une
+  égalité pour la première place. Les descriptions masquent le nom de la réponse.
+- Score personnel : 100 points par bonne réponse, historique immuable synchronisé,
+  statistiques calculées depuis les résultats du compte. Aucun gain de valeur réelle.
+- Le champion du jour vient du **catalogue Data Dragon complet du patch 14.18.1**,
+  pas d'un résultat Firestore partiel. Le jour change à **00:00 UTC**. Les IDs uniques
+  triés sont indexés par `FNV1a64("champion:" + YYYY-MM-DD) % nombreIDs`.
+  Le hash, le générateur pseudo-aléatoire et le mélange sont explicitement définis.
+- Un défi quotidien de rôle est généré depuis ce même catalogue et cette même date.
+  Son résultat a l'ID `daily-YYYY-MM-DD` ; les règles interdisent toute réécriture.
+  Les horloges d'appareil doivent être réglées correctement. Aucun classement ni
+  récompense sensible ne repose sur la date ou la validation cliente.
+- Les images de questions n'annoncent pas la solution à VoiceOver ; les catégories
+  textuelles sont proposées pour jouer sans reconnaissance visuelle.
 
 ## Configuration Firebase nécessaire
 

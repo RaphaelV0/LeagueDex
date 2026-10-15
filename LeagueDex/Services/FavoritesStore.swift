@@ -34,7 +34,7 @@ final class FavoritesStore: ObservableObject {
         guard let uid else { return }
         let token = generation
         listener = Firestore.firestore().collection("users").document(uid).collection("favorites")
-            .addSnapshotListener(includeMetadataChanges: true) { [weak self] snapshot, error in
+            .addSnapshotListener(includeMetadataChanges: true) { @Sendable [weak self] snapshot, error in
                 Task { @MainActor [weak self] in
                     guard let self, self.generation == token else { return }
                     if error != nil {
@@ -71,7 +71,7 @@ final class FavoritesStore: ObservableObject {
         migrating = true
         let token = generation
         let user = Firestore.firestore().collection("users").document(uid)
-        Firestore.firestore().runTransaction({ transaction, errorPointer -> Any? in
+        Firestore.firestore().runTransaction({ @Sendable transaction, errorPointer -> Any? in
             do {
                 var missing: [DocumentReference] = []
                 for id in legacy {
@@ -84,7 +84,7 @@ final class FavoritesStore: ObservableObject {
                 }
                 return nil
             } catch { errorPointer?.pointee = error as NSError; return nil }
-        }) { [weak self] _, error in
+        }) { @Sendable [weak self] _, error in
             Task { @MainActor [weak self] in
                 guard let self, self.generation == token else { return }
                 self.migrating = false
@@ -106,7 +106,7 @@ final class FavoritesStore: ObservableObject {
         hasPendingWrites = true
         let token = generation
         Firestore.firestore().collection("users").document(uid).collection("favorites").document(id)
-            .setData(["championID": id, "selected": selected, "updatedAt": FieldValue.serverTimestamp()]) { [weak self] error in
+            .setData(["championID": id, "selected": selected, "updatedAt": FieldValue.serverTimestamp()]) { @Sendable [weak self] error in
                 Task { @MainActor [weak self] in
                     guard let self, self.generation == token else { return }
                     if error != nil { self.errorMessage = "Modification du favori refusée par Firebase." }

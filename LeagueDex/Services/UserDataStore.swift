@@ -81,8 +81,8 @@ final class UserDataStore: ObservableObject {
         retryTask?.cancel()
     }
 
-    private func observe(_ collection: String, receive: @escaping (QuerySnapshot) -> Void) {
-        listeners.append(user.collection(collection).addSnapshotListener(includeMetadataChanges: true) { [weak self] snapshot, error in
+    private func observe(_ collection: String, receive: @escaping @MainActor (QuerySnapshot) -> Void) {
+        listeners.append(user.collection(collection).addSnapshotListener(includeMetadataChanges: true) { @Sendable [weak self] snapshot, error in
             Task { @MainActor [weak self] in
                 guard let self, self.isCurrentSession else { return }
                 if error != nil { self.errorMessage = "Synchronisation indisponible. Les données en cache restent consultables." }
@@ -146,11 +146,9 @@ final class UserDataStore: ObservableObject {
             let expectedRevision = build.revision
             let mutationID = build.mutationID
             let predecessorMutationID = build.predecessorMutationID
-            let payload: [String: Any] = ["name": build.name, "championID": build.championID, "itemIDs": build.itemIDs,
-                "revision": expectedRevision, "mutationID": build.mutationID,
-                "deleted": build.deleted, "updatedAt": FieldValue.serverTimestamp(),
-                "createdAt": expectedRevision == 0 ? FieldValue.serverTimestamp() : Timestamp(date: build.createdAt)]
-            db.runTransaction({ transaction, errorPointer -> Any? in
+            // Capture an immutable Sendable value; construct SDK dictionaries only
+            // on the Firestore worker, never carry mutable Any payloads across actors.
+            db.runTransaction({ @Sendable transaction, errorPointer -> Any? in
                 do {
                     let current = try transaction.getDocument(ref)
                     // A crash or sign-out can occur after commit but before the ACK
@@ -168,13 +166,14 @@ final class UserDataStore: ObservableObject {
                         errorPointer?.pointee = NSError(domain: "LeagueDex.BuildConflict", code: 409)
                         return nil
                     }
-                    var fields = payload
-                    fields["revision"] = nextRevision
-                    if let created = current.data()?["createdAt"] { fields["createdAt"] = created }
+                    let fields: [String: Any] = ["name": build.name, "championID": build.championID,
+                        "itemIDs": build.itemIDs, "revision": nextRevision, "mutationID": mutationID,
+                        "deleted": build.deleted, "updatedAt": FieldValue.serverTimestamp(),
+                        "createdAt": current.data()?["createdAt"] ?? FieldValue.serverTimestamp()]
                     transaction.setData(fields, forDocument: ref)
                     return nextRevision
                 } catch { errorPointer?.pointee = error as NSError; return nil }
-            }) { [weak self] result, error in
+            }) { @Sendable [weak self] result, error in
                 Task { @MainActor [weak self] in
                     guard let self else { return }
                     self.syncing.remove(id)
@@ -240,14 +239,14 @@ final class UserDataStore: ObservableObject {
         guard isCurrentSession, leftID != rightID, (1...18).contains(level) else { return }
         let id = "\(leftID)_\(rightID)_\(level)"
         user.collection("comparisons").document(id).setData(["leftID": leftID, "rightID": rightID,
-            "level": level, "updatedAt": FieldValue.serverTimestamp()]) { [weak self] error in
+            "level": level, "updatedAt": FieldValue.serverTimestamp()]) { @Sendable [weak self] error in
             Task { @MainActor [weak self] in if error != nil { self?.errorMessage = "Comparaison non enregistrée." } }
         }
     }
 
     func deleteComparison(_ comparison: SavedComparison) {
         guard isCurrentSession else { return }
-        user.collection("comparisons").document(comparison.id).delete { [weak self] error in
+        user.collection("comparisons").document(comparison.id).delete { @Sendable [weak self] error in
             Task { @MainActor [weak self] in if error != nil { self?.errorMessage = "Suppression de comparaison refusée." } }
         }
     }
@@ -258,7 +257,7 @@ final class UserDataStore: ObservableObject {
         let id = run.dayKey.isEmpty ? run.id : "daily-\(run.dayKey)"
         user.collection("quizRuns").document(id).setData(["category": run.category, "difficulty": run.difficulty,
             "score": run.score, "correct": run.correct, "total": run.total,
-            "completedAt": FieldValue.serverTimestamp(), "dayKey": run.dayKey]) { [weak self] error in
+            "completedAt": FieldValue.serverTimestamp(), "dayKey": run.dayKey]) { @Sendable [weak self] error in
             Task { @MainActor [weak self] in
                 if error != nil { self?.errorMessage = "Résultat non synchronisé ou défi déjà enregistré sur un autre appareil." }
             }

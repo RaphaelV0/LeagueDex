@@ -11,6 +11,10 @@ struct CompanionHubView: View {
                 VStack(alignment: .leading, spacing: LeagueTheme.Space.lg) {
                     LeagueSectionHeader(title: "Votre espace joueur",
                         subtitle: "\(favorites.ids.count) favoris · \(userData.builds.count) builds")
+                    DailyChampionCard()
+                    NavigationLink { QuizView() } label: {
+                        CompanionFeatureCard(title: "Quiz League of Legends", subtitle: "Six catégories, dix questions et votre progression", icon: "questionmark.circle.fill")
+                    }
                     NavigationLink { ChampionComparisonView() } label: {
                         CompanionFeatureCard(title: "Comparer les champions", subtitle: "Statistiques, rôles et compétences du niveau 1 à 18", icon: "arrow.left.arrow.right")
                     }

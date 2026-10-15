@@ -1,6 +1,6 @@
 import Foundation
 
-struct CustomBuild: Codable, Identifiable, Equatable {
+struct CustomBuild: Codable, Identifiable, Equatable, Sendable {
     var id = UUID().uuidString
     var name: String
     var championID: String
@@ -34,14 +34,14 @@ extension CustomBuild {
     }
 }
 
-struct SavedComparison: Identifiable, Equatable {
+struct SavedComparison: Identifiable, Equatable, Sendable {
     let id: String
     let leftID: String
     let rightID: String
     let level: Int
 }
 
-struct QuizRun: Identifiable, Equatable {
+struct QuizRun: Identifiable, Equatable, Sendable {
     let id: String
     let category: String
     let difficulty: String

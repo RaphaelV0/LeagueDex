@@ -18,6 +18,10 @@ xcodebuild -version
 echo "Running native ARAM selection, filtering and lifecycle tests..."
 swift test --parallel
 
+echo "Type-checking shared core with the app's default MainActor isolation..."
+swiftc -typecheck -parse-as-library -swift-version 5 -default-isolation MainActor \
+  LeagueDex/ARAMCore/*.swift LeagueDex/SyncCore/*.swift LeagueDex/CompanionCore/*.swift
+
 echo "Checking the LeagueDex project and available schemes..."
 xcodebuild -list -project LeagueDex.xcodeproj
 

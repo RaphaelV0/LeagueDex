@@ -5,17 +5,19 @@ struct ChampionDetailView: View {
     @ObservedObject var viewModel: ChampionViewModel
     private let initialFallback: DBChampion
     private let onGalleryChange: (Bool) -> Void
+    private let showsARAMHint: Bool
 
     var champion: DBChampion {
         viewModel.champions.first(where: { $0.id == championId }) ?? initialFallback
     }
 
-    init(champion: DBChampion, viewModel: ChampionViewModel,
+    init(champion: DBChampion, viewModel: ChampionViewModel, showsARAMHint: Bool = true,
          onGalleryChange: @escaping (Bool) -> Void = { _ in }) {
         self.initialFallback = champion
         self.championId = champion.id
         self.viewModel = viewModel
         self.onGalleryChange = onGalleryChange
+        self.showsARAMHint = showsARAMHint
     }
 
     @ScaledMetric(relativeTo: .largeTitle) private var scalableHeroHeight: CGFloat = 320
@@ -36,11 +38,13 @@ struct ChampionDetailView: View {
 
                     VStack(alignment: .leading, spacing: LeagueTheme.Space.lg) {
                         identity
-                        Label("Secouez l’iPhone pour changer de champion ARAM",
-                              systemImage: "dice.fill")
-                            .font(.footnote)
-                            .foregroundStyle(LeagueTheme.muted)
-                            .accessibilityAddTraits(.isStaticText)
+                        if showsARAMHint {
+                            Label("Secouez l’iPhone pour changer de champion ARAM",
+                                  systemImage: "dice.fill")
+                                .font(.footnote)
+                                .foregroundStyle(LeagueTheme.muted)
+                                .accessibilityAddTraits(.isStaticText)
+                        }
                         sectionShortcuts(proxy: scrollProxy)
 
                         if champion.isDetailLoaded {
