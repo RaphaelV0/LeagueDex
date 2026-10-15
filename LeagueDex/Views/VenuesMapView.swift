@@ -23,8 +23,15 @@ private enum VenueKind: String, CaseIterable, Identifiable {
 }
 
 struct VenuesMapView: View {
-    @StateObject private var viewModel = VenueViewModel()
+    @StateObject private var viewModel: VenueViewModel
     @StateObject private var locationManager = LocationManager()
+    @State private var searchText = ""
+    @State private var maximumDistanceKM = 0.0
+    @State private var showingMyProposals = false
+
+    init(uid: String) {
+        _viewModel = StateObject(wrappedValue: VenueViewModel(uid: uid))
+    }
 
     @State private var cameraPosition: MapCameraPosition = .region(
         MKCoordinateRegion(
@@ -38,7 +45,16 @@ struct VenuesMapView: View {
     @Environment(\.accessibilityReduceMotion) private var reduceMotion
 
     private var visibleVenues: [DBVenue] {
-        viewModel.venues.filter { selectedKind.includes($0) }
+        viewModel.venues.filter { venue in
+            guard selectedKind.includes(venue),
+                  searchText.isEmpty || venue.name.localizedStandardContains(searchText)
+                    || venue.address.localizedStandardContains(searchText) else { return false }
+            guard maximumDistanceKM > 0,
+                  let coordinate = locationManager.userLocation else { return true }
+            let user = CLLocation(latitude: coordinate.latitude, longitude: coordinate.longitude)
+            let place = CLLocation(latitude: venue.latitude, longitude: venue.longitude)
+            return user.distance(from: place) <= maximumDistanceKM * 1_000
+        }
     }
 
     var body: some View {
@@ -76,6 +92,21 @@ struct VenuesMapView: View {
                             .foregroundStyle(LeagueTheme.gold)
                     }
                     .accessibilityLabel("Choisir un lieu dans la liste")
+
+                    Menu {
+                        Button("Toutes les distances") { maximumDistanceKM = 0 }
+                        Button("Moins de 10 km") { maximumDistanceKM = 10 }
+                        Button("Moins de 25 km") { maximumDistanceKM = 25 }
+                        Button("Moins de 50 km") { maximumDistanceKM = 50 }
+                        Button("Moins de 100 km") { maximumDistanceKM = 100 }
+                    } label: {
+                        Image(systemName: "line.3.horizontal.decrease.circle")
+                            .frame(width: 44, height: 44)
+                            .foregroundStyle(LeagueTheme.gold)
+                    }
+                    .disabled(locationManager.userLocation == nil)
+                    .accessibilityLabel("Filtrer les lieux par distance")
+                    .accessibilityValue(maximumDistanceKM == 0 ? "Toutes distances" : "Moins de \(Int(maximumDistanceKM)) kilomètres")
 
                     Button(action: focusOnUser) {
                         Image(systemName: "location.fill")
@@ -160,7 +191,16 @@ struct VenuesMapView: View {
             .background(LeagueTheme.background)
             .navigationTitle("Lieux e-sport")
             .navigationBarTitleDisplayMode(.inline)
+            .searchable(text: $searchText, prompt: "Nom, ville ou adresse")
             .toolbar {
+                ToolbarItem(placement: .topBarLeading) {
+                    Button {
+                        showingMyProposals = true
+                    } label: {
+                        Image(systemName: "clock.arrow.circlepath")
+                    }
+                    .accessibilityLabel("Suivre mes propositions de lieux")
+                }
                 ToolbarItem(placement: .topBarTrailing) {
                     Button { addingVenue = true } label: {
                         Image(systemName: "plus")
@@ -169,10 +209,14 @@ struct VenuesMapView: View {
                 }
             }
             .sheet(item: $selectedVenue) { venue in
-                VenueDetailView(venue: venue, userCoordinate: locationManager.userLocation)
+                VenueDetailView(venue: venue, userCoordinate: locationManager.userLocation,
+                                viewModel: viewModel)
             }
             .sheet(isPresented: $addingVenue) {
                 AddVenueView(viewModel: viewModel)
+            }
+            .sheet(isPresented: $showingMyProposals) {
+                VenueProposalsView(viewModel: viewModel)
             }
             .onAppear { locationManager.requestLocation() }
         }
