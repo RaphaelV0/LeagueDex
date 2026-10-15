@@ -15,7 +15,12 @@ class ItemViewModel: ObservableObject {
     @Published var items: [DBItem] = []
     @Published var isLoading = false
     @Published var errorMessage: String?
-    private var isImporting = false
+    @Published private(set) var isFromCache = true
+    private var fallbackTask: Task<Void, Never>?
+    private var fallbackAllowsNetwork = false
+    private var hasLoadedFallback = false
+    private var fallbackGeneration = UUID()
+    private var listenerGeneration = UUID()
     
     private let db = Firestore.firestore()
     private var listenerRegistration: ListenerRegistration?
@@ -26,73 +31,94 @@ class ItemViewModel: ObservableObject {
     
     deinit {
         listenerRegistration?.remove()
+        fallbackTask?.cancel()
     }
     
     func fetchItemsFromFirebase() {
         listenerRegistration?.remove()
+        fallbackTask?.cancel()
+        fallbackTask = nil
+        hasLoadedFallback = false
+        fallbackGeneration = UUID()
+        listenerGeneration = UUID()
+        let generation = listenerGeneration
         errorMessage = nil
         isLoading = true
-        listenerRegistration = db.collection("items").addSnapshotListener { [weak self] snapshot, error in
-            guard let self = self else { return }
-            
-            if let error = error {
-                print("Erreur Firestore (Items): \(error.localizedDescription)")
-                self.errorMessage = "Impossible de charger les objets. Vérifiez votre connexion."
-                self.isLoading = false
-                return
-            }
-            
-            guard let documents = snapshot?.documents else {
-                self.errorMessage = "Aucune réponse de la base de données."
-                self.isLoading = false
-                return
-            }
-            
-            self.errorMessage = nil
-            self.items = documents.compactMap { try? $0.data(as: DBItem.self) }
-            self.items.sort { $0.totalCost > $1.totalCost } // Du plus cher au moins cher
-            self.isLoading = false
-            
-            if self.items.isEmpty && !self.isImporting {
-                Task { await self.syncItemsFromRiot() }
+        listenerRegistration = db.collection("items").addSnapshotListener(includeMetadataChanges: true) { [weak self] snapshot, error in
+            Task { @MainActor [weak self] in
+                guard let self, self.listenerGeneration == generation else { return }
+                self.receiveSnapshot(snapshot, error: error)
             }
         }
     }
-    
-    private func syncItemsFromRiot() async {
-        guard let url = DataDragon.catalogURL("item.json") else { return }
-        guard !isImporting else { return }
-        isImporting = true
-        defer { isImporting = false }
-        
-        do {
-            let (data, _) = try await URLSession.shared.data(from: url)
-            let response = try JSONDecoder().decode(APIItemResponse.self, from: data)
-            
-            let batch = db.batch()
-            
-            for (key, apiItem) in response.data {
-                // On exclut les objets qui ne coûtent rien (souvent des objets internes/cachés du jeu)
-                guard apiItem.gold.total > 0 else { continue }
-                
-                let dbItem = DBItem(
-                    id: key,
-                    name: apiItem.name,
-                    plaintext: apiItem.plaintext,
-                    itemDescription: apiItem.description,
-                    baseCost: apiItem.gold.base,
-                    totalCost: apiItem.gold.total,
-                    sellPrice: apiItem.gold.sell
-                )
-                
-                let docRef = db.collection("items").document(dbItem.id)
-                try batch.setData(from: dbItem, forDocument: docRef)
+
+    private func receiveSnapshot(_ snapshot: QuerySnapshot?, error: Error?) {
+        guard error == nil, let snapshot else {
+            errorMessage = "Impossible de charger les objets. Vérifiez votre connexion."
+            if items.isEmpty { loadRiotFallback(cachedOnly: true) }
+            else { isLoading = false }
+            return
+        }
+        if snapshot.documents.isEmpty {
+            let cachedOnly = snapshot.metadata.isFromCache || snapshot.metadata.hasPendingWrites
+            if cachedOnly && !items.isEmpty { isLoading = false }
+            else { loadRiotFallback(cachedOnly: cachedOnly) }
+            return
+        }
+
+        fallbackTask?.cancel()
+        fallbackTask = nil
+        fallbackGeneration = UUID()
+        hasLoadedFallback = false
+        let fetched = snapshot.documents.compactMap { try? $0.data(as: DBItem.self) }
+        if !fetched.isEmpty {
+            items = fetched.sorted { $0.totalCost > $1.totalCost }
+            isFromCache = snapshot.metadata.isFromCache
+        }
+        errorMessage = fetched.count == snapshot.documents.count ? nil : "Certains objets sont illisibles dans la base de données."
+        isLoading = false
+    }
+
+    /// An in-memory fallback never writes to the administrator-owned catalog.
+    private func loadRiotFallback(cachedOnly: Bool) {
+        if hasLoadedFallback && (cachedOnly || fallbackAllowsNetwork) { isLoading = false; return }
+        if fallbackTask != nil {
+            guard !cachedOnly, !fallbackAllowsNetwork else { return }
+            fallbackTask?.cancel()
+        }
+        fallbackAllowsNetwork = !cachedOnly
+        fallbackGeneration = UUID()
+        let generation = fallbackGeneration
+        isLoading = items.isEmpty
+        fallbackTask = Task { [weak self] in
+            do {
+                let result = try await DataDragon.fetch(APIItemResponse.self, file: "item.json", cachedOnly: cachedOnly) { response in
+                    guard !response.data.isEmpty, response.data.count <= 5_000,
+                          response.data.contains(where: { !$0.value.name.isEmpty && $0.value.gold.total > 0 }) else {
+                        throw URLError(.cannotParseResponse)
+                    }
+                }
+                try Task.checkCancellation()
+                guard let self, self.fallbackGeneration == generation else { return }
+                // Zero-cost entries are internal/hidden game objects, as in the legacy import.
+                self.items = result.value.data.compactMap { key, item -> DBItem? in
+                    guard item.gold.total > 0 else { return nil }
+                    return DBItem(
+                        id: key, name: item.name, plaintext: item.plaintext, itemDescription: item.description,
+                        baseCost: item.gold.base, totalCost: item.gold.total, sellPrice: item.gold.sell
+                    )
+                }.sorted { $0.totalCost > $1.totalCost }
+                self.hasLoadedFallback = true
+                self.isFromCache = result.isFromCache
+                self.isLoading = false
+                self.errorMessage = nil
+                self.fallbackTask = nil
+            } catch {
+                guard !Task.isCancelled, let self, self.fallbackGeneration == generation else { return }
+                self.fallbackTask = nil
+                self.isLoading = false
+                self.errorMessage = "Les objets sont indisponibles. Connectez-vous à Internet puis réessayez."
             }
-            try await batch.commit()
-            print("Importation Riot -> Firebase (Objets) terminée avec succès.")
-        } catch {
-            errorMessage = "Importation des objets impossible. Réessayez plus tard."
-            print("Erreur réseau Objets: \(error)")
         }
     }
 }

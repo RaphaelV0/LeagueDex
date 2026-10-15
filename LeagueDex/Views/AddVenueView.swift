@@ -2,7 +2,7 @@ import SwiftUI
 import MapKit
 
 /// Collect a venue, resolve its address through Apple Maps, then publish it
-/// directly to Firestore only after the user confirms the matched address.
+/// as a private, moderated Firestore proposal after confirming the address.
 struct AddVenueView: View {
     @ObservedObject var viewModel: VenueViewModel
     @Environment(\.dismiss) private var dismiss
@@ -84,7 +84,7 @@ struct AddVenueView: View {
                 }
 
                 Section {
-                    Text("Ce lieu sera publié dans Firestore et pourra être consulté par les autres utilisateurs. Les informations ajoutées sont déclaratives et ne sont pas vérifiées automatiquement.")
+                    Text("Ta proposition sera enregistrée dans ton compte Firebase et examinée avant d’être visible sur la carte. Une proposition par jour UTC est autorisée. Les horaires et informations doivent être exacts.")
                         .font(.footnote)
                         .foregroundStyle(.secondary)
                 }
@@ -105,9 +105,9 @@ struct AddVenueView: View {
                             Spacer()
                             if viewModel.isSaving {
                                 ProgressView()
-                                Text("Publication…")
+                                Text("Envoi…")
                             } else {
-                                Label("Ajouter ce lieu", systemImage: "plus.circle.fill")
+                                Label("Soumettre à la modération", systemImage: "paperplane.fill")
                             }
                             Spacer()
                         }
@@ -164,7 +164,7 @@ struct AddVenueView: View {
             try await viewModel.addVenue(draft, at: matchedCoordinate)
             dismiss()
         } catch {
-            errorMessage = "Ajout impossible : \(error.localizedDescription). Vérifiez la connexion et les règles d'accès Firestore."
+            errorMessage = "Proposition non enregistrée : \(error.localizedDescription). Vérifie la connexion et la limite quotidienne."
         }
     }
 }

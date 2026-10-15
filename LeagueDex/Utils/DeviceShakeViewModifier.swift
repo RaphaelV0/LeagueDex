@@ -1,39 +1,24 @@
-//
-//  DeviceShakeViewModifier.swift
-//  LeagueDex
-//
-//  Created by Etudiant on 17/09/2026.
-//
+import UIKit
 
-
-import SwiftUI
+/// One event per completed UIKit shake, preserved through modal transitions.
+struct DeviceShakeEvent: Equatable {
+    let id: UUID
+    let timestamp: TimeInterval
+}
 
 extension UIDevice {
-    static let deviceDidShakeNotification = Notification.Name(rawValue: "deviceDidShakeNotification")
+    static let deviceDidShakeNotification = Notification.Name("deviceDidShakeNotification")
 }
 
 extension UIWindow {
     open override func motionEnded(_ motion: UIEvent.EventSubtype, with event: UIEvent?) {
-        if motion == .motionShake {
-            NotificationCenter.default.post(name: UIDevice.deviceDidShakeNotification, object: nil)
+        guard motion == .motionShake else {
+            super.motionEnded(motion, with: event)
+            return
         }
-    }
-}
-
-struct DeviceShakeViewModifier: ViewModifier {
-    let action: () -> Void
-    
-    func body(content: Content) -> some View {
-        content
-            .onAppear()
-            .onReceive(NotificationCenter.default.publisher(for: UIDevice.deviceDidShakeNotification)) { _ in
-                action()
-            }
-    }
-}
-
-extension View {
-    func onShake(perform action: @escaping () -> Void) -> some View {
-        self.modifier(DeviceShakeViewModifier(action: action))
+        guard isKeyWindow, windowScene?.activationState == .foregroundActive else { return }
+        let shake = DeviceShakeEvent(id: UUID(), timestamp: event?.timestamp ?? ProcessInfo.processInfo.systemUptime)
+        NotificationCenter.default.post(name: UIDevice.deviceDidShakeNotification, object: self,
+                                        userInfo: ["shake": shake])
     }
 }

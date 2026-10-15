@@ -26,7 +26,7 @@ private enum ItemSortOrder: String {
 }
 
 struct ItemsView: View {
-    @StateObject private var viewModel = ItemViewModel()
+    @EnvironmentObject private var viewModel: ItemViewModel
     @State private var searchText = ""
     @State private var priceFilter: ItemPriceFilter = .all
     @State private var sortOrder: ItemSortOrder = .expensive

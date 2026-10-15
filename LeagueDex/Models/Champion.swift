@@ -38,15 +38,13 @@ struct DBChampion: Codable, Identifiable, Hashable {
     
     // Fonction mathématique intégrée au modèle
     func statAt(base: Double, growth: Double, level: Int) -> Double {
-        if level == 1 { return base }
-        let n = Double(level - 1)
-        return base + (growth * (n * (0.7025 + 0.0175 * n)))
+        StatGrowth.value(base: base, growth: growth, level: level)
     }
 }
 
 // Structures imbriquées pour DBChampion
 struct DBSkin: Codable, Identifiable, Hashable {
-    var id: String { name }
+    var id: String { "\(championId)_\(num)" }
     let name: String
     let num: Int
     var url: URL? { URL(string: "https://ddragon.leagueoflegends.com/cdn/img/champion/splash/\(championId)_\(num).jpg") }

@@ -12,6 +12,7 @@
 		EC281724305BD65700858D59 /* FirebaseStorage in Frameworks */ = {isa = PBXBuildFile; productRef = EC281723305BD65700858D59 /* FirebaseStorage */; };
 		EC281759305BE13B00858D59 /* FirebaseCore in Frameworks */ = {isa = PBXBuildFile; productRef = EC281758305BE13B00858D59 /* FirebaseCore */; };
 		EC28175B305BE14400858D59 /* FirebaseFirestore in Frameworks */ = {isa = PBXBuildFile; productRef = EC28175A305BE14400858D59 /* FirebaseFirestore */; };
+		D157F0A13059000100000001 /* FirebaseAuth in Frameworks */ = {isa = PBXBuildFile; productRef = D157F0A13059000100000002 /* FirebaseAuth */; };
 /* End PBXBuildFile section */
 
 /* Begin PBXFileReference section */
@@ -35,6 +36,7 @@
 				EC281722305BD65700858D59 /* FirebaseCrashlytics in Frameworks */,
 				EC281759305BE13B00858D59 /* FirebaseCore in Frameworks */,
 				EC28175B305BE14400858D59 /* FirebaseFirestore in Frameworks */,
+				D157F0A13059000100000001 /* FirebaseAuth in Frameworks */,
 				EC281724305BD65700858D59 /* FirebaseStorage in Frameworks */,
 			);
 			runOnlyForDeploymentPostprocessing = 0;
@@ -91,6 +93,7 @@
 				EC281723305BD65700858D59 /* FirebaseStorage */,
 				EC281758305BE13B00858D59 /* FirebaseCore */,
 				EC28175A305BE14400858D59 /* FirebaseFirestore */,
+				D157F0A13059000100000002 /* FirebaseAuth */,
 			);
 			productName = LeagueDex;
 			productReference = EC283C5D3052E91B00E25A32 /* LeagueDex.app */;
@@ -372,6 +375,11 @@
 /* End XCRemoteSwiftPackageReference section */
 
 /* Begin XCSwiftPackageProductDependency section */
+		D157F0A13059000100000002 /* FirebaseAuth */ = {
+			isa = XCSwiftPackageProductDependency;
+			package = EC28171E305BD65700858D59 /* XCRemoteSwiftPackageReference "firebase-ios-sdk" */;
+			productName = FirebaseAuth;
+		};
 		EC28171F305BD65700858D59 /* FirebaseAnalytics */ = {
 			isa = XCSwiftPackageProductDependency;
 			package = EC28171E305BD65700858D59 /* XCRemoteSwiftPackageReference "firebase-ios-sdk" */;
