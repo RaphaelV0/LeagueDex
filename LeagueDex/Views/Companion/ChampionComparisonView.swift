@@ -121,10 +121,14 @@ struct ChampionComparisonView: View {
             }
             Text("Écart à droite : \(delta > 0 ? "+" : "")\(formatted(delta))")
                 .font(.caption.monospacedDigit()).foregroundStyle(LeagueTheme.muted)
+            if stat == .attackSpeed {
+                Text("Valeur de base du catalogue, indépendante du niveau sélectionné.")
+                    .font(.caption).foregroundStyle(LeagueTheme.muted)
+            }
         }
         .padding(LeagueTheme.Space.md).leagueSurface()
         .accessibilityElement(children: .ignore)
-        .accessibilityLabel("\(stat.rawValue). \(self.left?.name ?? "Premier champion") : \(formatted(left)). \(self.right?.name ?? "Second champion") : \(formatted(right)). Écart à droite : \(formatted(delta)).")
+        .accessibilityLabel("\(stat.rawValue). \(self.left?.name ?? "Premier champion") : \(formatted(left)). \(self.right?.name ?? "Second champion") : \(formatted(right)). Écart à droite : \(formatted(delta)).\(stat == .attackSpeed ? " Valeur de base indépendante du niveau sélectionné." : "")")
     }
 
     private func statValue(_ value: Double, fraction: Double, color: Color) -> some View {
@@ -206,7 +210,7 @@ struct ChampionComparisonView: View {
 
 private enum ComparisonStat: String, CaseIterable, Identifiable {
     case health = "Points de vie", mana = "Mana / Énergie", damage = "Dégâts d’attaque"
-    case armor = "Armure", magicResistance = "Résistance magique", attackSpeed = "Vitesse d’attaque"
+    case armor = "Armure", magicResistance = "Résistance magique", attackSpeed = "Vitesse d’attaque de base"
     case movement = "Vitesse de déplacement", critical = "Critique"
     var id: String { rawValue }
 
@@ -217,7 +221,7 @@ private enum ComparisonStat: String, CaseIterable, Identifiable {
         case .damage: return champion.statAt(base: champion.attackdamage, growth: champion.attackdamageperlevel, level: level)
         case .armor: return champion.statAt(base: champion.armor, growth: champion.armorperlevel, level: level)
         case .magicResistance: return champion.statAt(base: champion.spellblock, growth: champion.spellblockperlevel, level: level)
-        case .attackSpeed: return champion.statAt(base: champion.attackspeed, growth: champion.attackspeedperlevel, level: level)
+        case .attackSpeed: return champion.attackspeed
         case .movement: return champion.movespeed
         case .critical: return champion.statAt(base: champion.crit, growth: champion.critperlevel, level: level)
         }

@@ -38,11 +38,16 @@ struct CompanionCoreTests {
     @Test("A seventh item is refused and removing one slot permits a replacement")
     func slotLimit() {
         var inventory = BuildInventory()
-        for _ in 0..<6 { #expect(inventory.add("sword")) }
-        #expect(!inventory.add("boots"))
+        for _ in 0..<6 {
+            let accepted = inventory.add("sword")
+            #expect(accepted)
+        }
+        let seventhAccepted = inventory.add("boots")
+        #expect(!seventhAccepted)
         #expect(inventory.itemIDs.count == 6)
         inventory.remove(at: 2)
-        #expect(inventory.add("boots"))
+        let replacementAccepted = inventory.add("boots")
+        #expect(replacementAccepted)
         #expect(inventory.itemIDs.last == "boots")
         #expect(inventory.isValid)
     }
@@ -53,7 +58,10 @@ struct CompanionCoreTests {
         #expect(!inventory.isValid)
         inventory.remove(at: 6)
         #expect(inventory.isValid)
-        #expect(!inventory.add(""))
+        var emptyInventory = BuildInventory()
+        let emptyAccepted = emptyInventory.add("")
+        #expect(!emptyAccepted)
+        #expect(emptyInventory.itemIDs.isEmpty)
         inventory.remove(at: -1)
         #expect(inventory.itemIDs.count == 6)
     }

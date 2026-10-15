@@ -49,10 +49,10 @@ résultats doivent être vérifiés avant toute fusion.
 - File locale, reprise, détection de conflits et récupération des suppressions en
   conflit. Les contenus locaux peuvent être conservés dans un nouveau build.
 - La formule des fiches est partagée avec le comparateur, avec bornage 1–18.
-  Son interprétation historique de la croissance de vitesse d'attaque est conservée
-  conformément à la demande de réutiliser les formules ; elle ne simule pas les
-  multiplicateurs, ratios et effets de combat de Riot. Une révision de cette formule
-  doit être validée séparément sur toutes les fiches et comparaisons.
+  Le comparateur affiche explicitement la vitesse d'attaque **de base**, sans
+  appliquer à cette valeur un coefficient de croissance additif inadapté.
+  La fiche historique reste intacte : sa formule de vitesse d'attaque aux niveaux
+  supérieurs nécessite une correction séparée avec validation des ratios Riot.
 
 Validation intermédiaire : neuf groupes de tests Firestore réussis localement et
 dans GitHub Actions ; revue statique B et absence de nouveaux listeners/réseau

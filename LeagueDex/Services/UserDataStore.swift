@@ -147,7 +147,7 @@ final class UserDataStore: ObservableObject {
             let mutationID = build.mutationID
             let predecessorMutationID = build.predecessorMutationID
             let payload: [String: Any] = ["name": build.name, "championID": build.championID, "itemIDs": build.itemIDs,
-                "revision": expectedRevision + 1, "mutationID": build.mutationID,
+                "revision": expectedRevision, "mutationID": build.mutationID,
                 "deleted": build.deleted, "updatedAt": FieldValue.serverTimestamp(),
                 "createdAt": expectedRevision == 0 ? FieldValue.serverTimestamp() : Timestamp(date: build.createdAt)]
             db.runTransaction({ transaction, errorPointer -> Any? in
@@ -189,11 +189,16 @@ final class UserDataStore: ObservableObject {
                             self.scheduleRetry()
                         }
                     } else if let latest = self.pending[id] {
+                        guard let committedRevision = result as? Int else {
+                            self.errorMessage = "Confirmation incomplète. Le build local est conservé."
+                            self.scheduleRetry()
+                            return
+                        }
                         if latest == build {
                             self.pending[id] = nil
                         } else {
                             var next = latest
-                            next.revision = result as? Int ?? expectedRevision + 1
+                            next.revision = committedRevision
                             next.predecessorMutationID = nil
                             self.pending[id] = next
                         }
