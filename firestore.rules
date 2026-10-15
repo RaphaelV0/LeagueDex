@@ -49,6 +49,35 @@ service cloud.firestore {
             && runID == 'daily-' + data.dayKey));
     }
 
+    // UTC daily identifiers are derived from trusted server time, not device time.
+    function todayKey() {
+      return string(request.time.year()) + '-' + string(request.time.month()) + '-' + string(request.time.day());
+    }
+    function validProposal(data) {
+      return data.keys().hasAll(['authorUID', 'name', 'address', 'latitude', 'longitude', 'type', 'status', 'createdAt'])
+        && data.keys().hasOnly(['authorUID', 'name', 'address', 'latitude', 'longitude', 'type', 'status', 'createdAt',
+                                'openingHours', 'phone', 'website', 'details'])
+        && data.authorUID == request.auth.uid
+        && data.name is string && data.name.size() > 0 && data.name.size() <= 120
+        && data.address is string && data.address.size() > 0 && data.address.size() <= 250
+        && data.latitude is number && data.latitude >= -90 && data.latitude <= 90
+        && data.longitude is number && data.longitude >= -180 && data.longitude <= 180
+        && data.type in ['Bar E-sport', 'Salle LAN', 'Autre lieu gaming']
+        && data.status == 'pending' && data.createdAt == request.time
+        && data.get('openingHours', '') is string && data.get('openingHours', '').size() <= 500
+        && data.get('phone', '') is string && data.get('phone', '').size() <= 60
+        && data.get('website', '') is string && data.get('website', '').size() <= 300
+        && data.get('details', '') is string && data.get('details', '').size() <= 1500;
+    }
+    function validVenueReport(data) {
+      return data.keys().hasAll(['authorUID', 'venueID', 'reason', 'createdAt'])
+        && data.keys().hasOnly(['authorUID', 'venueID', 'reason', 'createdAt'])
+        && data.authorUID == request.auth.uid
+        && identifier(data.venueID)
+        && data.reason in ['Adresse incorrecte', 'Établissement fermé', 'Informations erronées', 'Autre']
+        && data.createdAt == request.time;
+    }
+
     // Only explicitly listed private collections are accessible. Parent documents,
     // future subcollections and collection-group requests have no blanket grant.
     match /users/{uid}/favorites/{championID} {
@@ -85,6 +114,30 @@ service cloud.firestore {
       allow update, delete: if false;
     }
 
+    // Account-owned community drafts, one immutable new proposal per UTC day.
+    // Approval never grants the client rights to publish public /venues entries.
+    match /users/{uid}/venueProposals/{proposalID} {
+      allow read: if owner(uid) || administrator();
+      allow create: if owner(uid)
+        && proposalID == todayKey()
+        && validProposal(request.resource.data);
+      allow update: if administrator()
+        && resource.data.status == 'pending'
+        && request.resource.data.diff(resource.data).affectedKeys()
+          .hasOnly(['status', 'reviewedAt', 'reviewedBy'])
+        && request.resource.data.status in ['approved', 'rejected']
+        && request.resource.data.reviewedAt == request.time
+        && request.resource.data.reviewedBy == request.auth.uid;
+      allow delete: if false;
+    }
+    // Once-per-venue-per-day reports, private to their author and moderators.
+    match /users/{uid}/venueReports/{reportID} {
+      allow read: if owner(uid) || administrator();
+      allow create: if owner(uid) && validVenueReport(request.resource.data)
+        && reportID == request.resource.data.venueID + '_' + todayKey();
+      allow update, delete: if false;
+    }
+
     match /champions/{championID} {
       allow read: if signedIn();
       allow write: if administrator();
@@ -93,8 +146,8 @@ service cloud.firestore {
       allow read: if signedIn();
       allow write: if administrator();
     }
-    // Existing catalog stays readable. Community writes remain closed until the
-    // authenticated moderation/anti-spam schema is enabled in Phase D.
+    // Only privileged moderators can publish reviewed entries.
+    // Authenticated users contribute through private proposals and reports.
     match /venues/{venueID} {
       allow read: if signedIn();
       allow write: if administrator();
