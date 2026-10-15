@@ -156,24 +156,9 @@ final class VenueViewModel: ObservableObject {
             let clean = trimmed(value)
             if !clean.isEmpty { data[key] = clean }
         }
-        // createDocument via transaction does not overwrite a previously accepted
-        // daily submission; offline duplicate attempts remain server protected.
+        // Security rules permit creation only, never overwrite an existing day.
         let ref = db.collection("users").document(uid).collection("venueProposals").document(key)
-        let fields = data
-        try await db.runTransaction { transaction, errorPointer -> Any? in
-            do {
-                let previous = try transaction.getDocument(ref)
-                guard !previous.exists else {
-                    errorPointer?.pointee = VenueSubmissionError.dailyLimit as NSError
-                    return nil
-                }
-                transaction.setData(fields, forDocument: ref)
-                return true
-            } catch {
-                errorPointer?.pointee = error as NSError
-                return nil
-            }
-        }
+        try await ref.setData(data)
     }
 
     func reportVenue(_ venue: DBVenue, reason: String) async throws {
@@ -184,24 +169,12 @@ final class VenueViewModel: ObservableObject {
         guard validReasons.contains(reason) else { throw VenueSubmissionError.invalidLocation }
         let key = "\(venueID)_\(Self.submissionKey())"
         let ref = db.collection("users").document(uid).collection("venueReports").document(key)
-        try await db.runTransaction { transaction, errorPointer -> Any? in
-            do {
-                guard try !transaction.getDocument(ref).exists else {
-                    errorPointer?.pointee = VenueSubmissionError.alreadyReported as NSError
-                    return nil
-                }
-                transaction.setData([
-                    "authorUID": self.uid,
-                    "venueID": venueID,
-                    "reason": reason,
-                    "createdAt": FieldValue.serverTimestamp()
-                ], forDocument: ref)
-                return true
-            } catch {
-                errorPointer?.pointee = error as NSError
-                return nil
-            }
-        }
+        try await ref.setData([
+            "authorUID": uid,
+            "venueID": venueID,
+            "reason": reason,
+            "createdAt": FieldValue.serverTimestamp()
+        ])
     }
 }
 
