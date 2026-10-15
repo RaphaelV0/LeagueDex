@@ -165,3 +165,100 @@ test('catalog reads require authentication; trusted admin claims alone permit ca
     await assertFails(getDoc(doc(database(null), path)));
   }
 });
+
+
+const utcKey = () => {
+  const now = new Date();
+  return [now.getUTCFullYear(), now.getUTCMonth() + 1, now.getUTCDate()].join('-');
+};
+const venueProposal = (overrides = {}) => ({
+  authorUID: 'alice',
+  name: 'Bar gaming communautaire',
+  address: '12 rue Exemple, Lyon, France',
+  latitude: 45.756,
+  longitude: 4.833,
+  type: 'Bar E-sport',
+  status: 'pending',
+  createdAt: serverTimestamp(),
+  openingHours: 'samedi 18 h – minuit',
+  phone: '',
+  website: '',
+  details: 'Tournois locaux',
+  ...overrides
+});
+const venueReport = (overrides = {}) => ({
+  authorUID: 'alice',
+  venueID: 'featured-paris',
+  reason: 'Adresse incorrecte',
+  createdAt: serverTimestamp(),
+  ...overrides
+});
+
+test('community proposals are private, moderated and limited to one server-day per account', async () => {
+  const ref = doc(database(), 'users/alice/venueProposals/' + utcKey());
+  await assertSucceeds(setDoc(ref, venueProposal()));
+  await assertSucceeds(getDoc(ref));
+  await assertSucceeds(getDocs(collection(database(), 'users/alice/venueProposals')));
+  await assertSucceeds(getDoc(doc(database('staff', { admin: true }), ref.path)));
+  await assertFails(getDoc(doc(database('bob'), ref.path)));
+  await assertFails(getDoc(doc(database(null), ref.path)));
+  await assertFails(setDoc(ref, venueProposal({ name: 'Second proposal' })));
+  await assertFails(deleteDoc(ref));
+  await assertFails(updateDoc(ref, { name: 'Self approved' }));
+  await assertFails(updateDoc(ref, { status: 'approved' }));
+  await assertFails(setDoc(doc(database(), 'venues/community-test'), venueProposal()));
+  await assertFails(setDoc(doc(database('bob'), 'users/alice/venueProposals/' + utcKey()), venueProposal()));
+  await assertFails(setDoc(doc(database(), 'users/alice/venueProposals/2099-1-1'), venueProposal()));
+});
+
+test('venue proposals validate coordinates, required fields and server timestamp', async () => {
+  for (const [i, invalid] of [
+    { authorUID: 'bob' }, { status: 'approved' }, { type: 'Grocery' },
+    { latitude: 100 }, { latitude: '45.7' }, { longitude: -190 },
+    { name: '' }, { name: 'x'.repeat(121) }, { address: '' },
+    { details: 'x'.repeat(1501) }, { phone: 123 },
+    { createdAt: Timestamp.fromMillis(0) }, { reviewedBy: 'alice' }
+  ].entries()) {
+    await assertFails(setDoc(doc(database(), 'users/alice/venueProposals/' + utcKey()),
+      venueProposal(invalid)));
+  }
+});
+
+test('only trusted admin can review a proposal and cannot alter submitted content', async () => {
+  const ref = doc(database(), 'users/alice/venueProposals/' + utcKey());
+  await assertSucceeds(setDoc(ref, venueProposal()));
+  const reviewer = doc(database('staff', { admin: true }), ref.path);
+  await assertFails(updateDoc(doc(database('bob'), ref.path), {
+    status: 'approved', reviewedBy: 'bob', reviewedAt: serverTimestamp()
+  }));
+  await assertFails(updateDoc(reviewer, { name: 'Altered', status: 'approved',
+    reviewedBy: 'staff', reviewedAt: serverTimestamp() }));
+  await assertSucceeds(updateDoc(reviewer, {
+    status: 'approved', reviewedBy: 'staff', reviewedAt: serverTimestamp()
+  }));
+  await assertFails(updateDoc(reviewer, {
+    status: 'rejected', reviewedBy: 'staff', reviewedAt: serverTimestamp()
+  }));
+});
+
+test('venue reports are private, immutable, server-dated and limited per place each day', async () => {
+  const key = 'featured-paris_' + utcKey();
+  const ref = doc(database(), 'users/alice/venueReports/' + key);
+  await assertSucceeds(setDoc(ref, venueReport()));
+  await assertSucceeds(getDoc(ref));
+  await assertSucceeds(getDoc(doc(database('staff', { admin: true }), ref.path)));
+  await assertFails(getDoc(doc(database('bob'), ref.path)));
+  await assertFails(setDoc(ref, venueReport()));
+  await assertFails(deleteDoc(ref));
+  await assertFails(updateDoc(ref, { reason: 'Autre' }));
+  for (const [i, invalid] of [
+    { authorUID: 'bob' }, { venueID: 'different-place' },
+    { reason: 'Not true' }, { createdAt: Timestamp.fromMillis(0) },
+    { extraField: true }
+  ].entries()) {
+    await assertFails(setDoc(doc(database(), 'users/alice/venueReports/other-' + i + '_' + utcKey()),
+      venueReport(invalid)));
+  }
+  await assertFails(setDoc(doc(database(), 'users/alice/venueReports/featured-paris_2099-1-1'),
+    venueReport()));
+});
