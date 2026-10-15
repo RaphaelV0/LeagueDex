@@ -38,9 +38,7 @@ struct DBChampion: Codable, Identifiable, Hashable {
     
     // Fonction mathématique intégrée au modèle
     func statAt(base: Double, growth: Double, level: Int) -> Double {
-        if level == 1 { return base }
-        let n = Double(level - 1)
-        return base + (growth * (n * (0.7025 + 0.0175 * n)))
+        StatGrowth.value(base: base, growth: growth, level: level)
     }
 }
 

@@ -34,12 +34,22 @@ Retrouvez toutes les informations sur vos champions préférés, les objets du j
 
 ## 🚀 Installation & Prérequis
 
-1. **Prérequis :** Xcode 15+ et cible iOS 17.0 minimum.
+1. **Prérequis :** Xcode 26.6 et SDK iOS 26.5 ou ultérieur. La cible iOS 26.5 du projet est conservée.
 2. Clonez ou téléchargez ce projet sur votre Mac.
-3. Ouvrez le projet dans Xcode et assurez-vous que le package **FirebaseFirestore** est correctement lié.
+3. Ouvrez le projet dans Xcode et résolvez le package Firebase existant, notamment **FirebaseAuth** et **FirebaseFirestore**. Activez Email/Password dans Firebase Authentication.
 4. Configurez les autorisations de localisation dans le fichier `Info.plist` (`Privacy - Location When In Use Usage Description`).
 5. Sélectionnez un simulateur (ex: iPhone Pro avec une position GPS simulée via le menu *Debug > Location*) ou branchez votre iPhone.
 6. Lancez l'application (`Cmd + R`).
+
+La connexion est obligatoire. Examinez [les instructions de livraison et migration](docs/PREMIUM_DELIVERY.md)
+et testez les règles Firestore avant leur déploiement manuel sur le projet existant.
+Les clients ne disposent pas du droit d'écriture sur les catalogues publics.
+
+Sur macOS, `bash scripts/validate-ios.sh` exécute les tests Swift et les builds
+simulateur Debug et Release. Les règles se testent séparément avec Node 22,
+Java 21, `npm ci` puis `npm run test:rules` (projet d'émulation `demo-leaguedex`).
+Les dépendances npm servent uniquement à la validation Firebase et ne sont pas
+embarquées dans l'application native.
 
 ---
 

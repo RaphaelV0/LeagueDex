@@ -8,12 +8,15 @@ let package = Package(
     platforms: [.macOS(.v13)],
     products: [
         .library(name: "ARAMCore", targets: ["ARAMCore"]),
-        .library(name: "SyncCore", targets: ["SyncCore"])
+        .library(name: "SyncCore", targets: ["SyncCore"]),
+        .library(name: "CompanionCore", targets: ["CompanionCore"])
     ],
     targets: [
         .target(name: "ARAMCore", path: "LeagueDex/ARAMCore"),
         .testTarget(name: "ARAMCoreTests", dependencies: ["ARAMCore"], path: "Tests/ARAMCoreTests"),
         .target(name: "SyncCore", path: "LeagueDex/SyncCore"),
-        .testTarget(name: "SyncCoreTests", dependencies: ["SyncCore"], path: "Tests/SyncCoreTests")
+        .testTarget(name: "SyncCoreTests", dependencies: ["SyncCore"], path: "Tests/SyncCoreTests"),
+        .target(name: "CompanionCore", path: "LeagueDex/CompanionCore"),
+        .testTarget(name: "CompanionCoreTests", dependencies: ["CompanionCore"], path: "Tests/CompanionCoreTests")
     ]
 )

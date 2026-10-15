@@ -1,7 +1,7 @@
 import SwiftUI
 
 struct MainTabView: View {
-    @State private var selectedTab = 0
+    @State private var selectedTab = 3
     @StateObject private var champions = ChampionViewModel()
     @StateObject private var items = ItemViewModel()
     @StateObject private var userData: UserDataStore
@@ -12,6 +12,9 @@ struct MainTabView: View {
 
     var body: some View {
         TabView(selection: $selectedTab) {
+            CompanionHubView()
+                .tabItem { Label("Accueil", systemImage: "house.fill") }
+                .tag(3)
             // 1er Onglet : Champions & ARAM
             ChampionsView(isActive: selectedTab == 0)
                 .tabItem {
@@ -33,9 +36,6 @@ struct MainTabView: View {
                 }
                 .tag(2)
 
-            AccountView()
-                .tabItem { Label("Compte", systemImage: "person.crop.circle") }
-                .tag(3)
         }
         .safeAreaInset(edge: .top, spacing: 0) { SyncStatusBanner() }
         .environmentObject(champions)

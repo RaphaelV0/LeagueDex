@@ -23,8 +23,9 @@ résultats doivent être vérifiés avant toute fusion.
 - Favoris : `users/{uid}/favorites/{championID}`, avec `selected` et `updatedAt`.
   Les retraits sont des tombstones. Les modifications simultanées d'un même favori
   suivent l'ordre de réception serveur ; des champions différents ne s'écrasent pas.
-- Migration des clés locales `LeagueDex.favoriteChampionIDs.v1` et des anciens
-  indicateurs : union transactionnelle uniquement pour les documents absents.
+- Migration de la clé locale `LeagueDex.favoriteChampionIDs.v1` : union
+  transactionnelle uniquement pour les documents absents. Les anciens indicateurs
+  partagés du catalogue, sans auteur identifiable, ne sont pas attribués à un compte.
   Un retrait distant explicite est conservé. La clé source n'est jamais supprimée.
   Une réservation locale `LeagueDex.legacyFavoritesClaim.v2` associe la tentative
   au premier compte avant le réseau ; un changement de compte pendant l'import
@@ -33,6 +34,31 @@ résultats doivent être vérifiés avant toute fusion.
 - Les clients ne modifient plus les catalogues publics `champions` et `items`.
   Les données Data Dragon validées peuvent servir de secours local ; les détails
   téléchargés sont conservés sur disque. Le patch reste volontairement `14.18.1`.
+
+## Phase B — Comparateur et builds
+
+- Accueil compagnon dans une navigation à quatre onglets ; compte accessible depuis l'accueil.
+- Recherche des deux champions, niveau commun 1–18, huit statistiques avec barres
+  et écarts numériques, rôles, passif et compétences issus du catalogue existant.
+- Comparaisons favorites enregistrées, rouvertes et supprimées dans le compte.
+- Création, édition, duplication et suppression de builds ; choix du champion,
+  recherche d'objets, six emplacements, icônes, descriptions et coût du catalogue.
+  Les doublons d'objets sont conservés comme des emplacements distincts.
+- Un objet absent garde sa référence et rend le total explicitement indisponible ;
+  seul un sous-total des objets connus est alors affiché.
+- File locale, reprise, détection de conflits et récupération des suppressions en
+  conflit. Les contenus locaux peuvent être conservés dans un nouveau build.
+- La formule des fiches est partagée avec le comparateur, avec bornage 1–18.
+  Son interprétation historique de la croissance de vitesse d'attaque est conservée
+  conformément à la demande de réutiliser les formules ; elle ne simule pas les
+  multiplicateurs, ratios et effets de combat de Riot. Une révision de cette formule
+  doit être validée séparément sur toutes les fiches et comparaisons.
+
+Validation intermédiaire : neuf groupes de tests Firestore réussis localement et
+dans GitHub Actions ; revue statique B et absence de nouveaux listeners/réseau
+dans les vues compagnon. Six tests natifs de statistiques/inventaire et deux tests
+de migration de file locale ajoutés aux douze tests de politique de synchronisation
+et aux tests ARAM existants. Leur exécution est confiée à la CI macOS.
 
 ## Configuration Firebase nécessaire
 

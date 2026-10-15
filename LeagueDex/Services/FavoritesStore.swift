@@ -53,12 +53,8 @@ final class FavoritesStore: ObservableObject {
 
     /// The original backup is never deleted. Only its first authenticated owner imports it.
     func migrateIfNeeded(_ champions: [DBChampion]) {
-        if !defaults.bool(forKey: "LeagueDex.favoritesMigrated.v1"), !champions.isEmpty {
-            var legacy = Set(defaults.stringArray(forKey: legacyKey) ?? [])
-            legacy.formUnion(champions.filter(\.isFavorite).map(\.id))
-            defaults.set(legacy.sorted(), forKey: legacyKey)
-            defaults.set(true, forKey: "LeagueDex.favoritesMigrated.v1")
-        }
+        // Old shared catalog flags have no author uid and cannot be attributed
+        // safely. Only this device's existing local backup is imported.
         importLegacyIfNeeded()
     }
 
