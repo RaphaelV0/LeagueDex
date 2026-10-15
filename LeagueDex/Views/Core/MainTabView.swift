@@ -2,6 +2,13 @@ import SwiftUI
 
 struct MainTabView: View {
     @State private var selectedTab = 0
+    @StateObject private var champions = ChampionViewModel()
+    @StateObject private var items = ItemViewModel()
+    @StateObject private var userData: UserDataStore
+
+    init(uid: String) {
+        _userData = StateObject(wrappedValue: UserDataStore(uid: uid))
+    }
 
     var body: some View {
         TabView(selection: $selectedTab) {
@@ -25,7 +32,15 @@ struct MainTabView: View {
                     Label("Lieux", systemImage: "map.fill")
                 }
                 .tag(2)
+
+            AccountView()
+                .tabItem { Label("Compte", systemImage: "person.crop.circle") }
+                .tag(3)
         }
+        .safeAreaInset(edge: .top, spacing: 0) { SyncStatusBanner() }
+        .environmentObject(champions)
+        .environmentObject(items)
+        .environmentObject(userData)
         .tint(LeagueTheme.gold)
         .toolbarBackground(LeagueTheme.surface, for: .tabBar)
         .toolbarBackground(.visible, for: .tabBar)

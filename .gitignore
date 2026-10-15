@@ -1,2 +1,5 @@
 .build/
 .swiftpm/
+node_modules/
+*-debug.log
+.firebase/

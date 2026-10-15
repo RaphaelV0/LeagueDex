@@ -4,7 +4,7 @@ import Combine
 /// Manual navigation and one ARAM presentation share the same champion catalog.
 struct ChampionsView: View {
     var isActive: Bool = true
-    @StateObject private var viewModel = ChampionViewModel()
+    @EnvironmentObject private var viewModel: ChampionViewModel
 
     @State private var searchText = ""
     @State private var selectedRole = "Tous"

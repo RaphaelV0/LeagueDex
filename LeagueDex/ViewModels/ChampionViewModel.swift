@@ -15,37 +15,56 @@ class ChampionViewModel: ObservableObject {
     @Published var champions: [DBChampion] = []
     @Published var isLoading = false
     @Published var errorMessage: String?
+    @Published private(set) var isFromCache = true
+    private var favoritesSubscription: AnyCancellable?
     @Published private(set) var detailErrors: [String: String] = [:]
     @Published private(set) var detailLoadingIDs = Set<String>()
 
     // The model owns these requests, rather than a detail view's cancellable .task.
-    // Returning to a champion shares the existing request and its in-memory result.
+    // Returning to a champion shares the existing request and its in-memory result;
+    // DataDragon also keeps validated downloads on disk across process restarts.
     private var detailTasks: [String: Task<Void, Never>] = [:]
     private var detailsCache: [String: ChampionDetails] = [:]
-    private var importTask: Task<Void, Never>?
-    private var isImporting = false
+    private var fallbackTask: Task<Void, Never>?
+    private var fallbackAllowsNetwork = false
+    private var hasLoadedFallback = false
+    private var fallbackGeneration = UUID()
+    private var listenerGeneration = UUID()
     
     private let db = Firestore.firestore()
     private var listenerRegistration: ListenerRegistration?
     
     init() {
+        favoritesSubscription = FavoritesStore.shared.$ids.sink { [weak self] ids in
+            guard let self else { return }
+            for index in self.champions.indices {
+                self.champions[index].isFavorite = ids.contains(self.champions[index].id)
+            }
+        }
         fetchChampionsFromFirebase()
     }
     
     deinit {
         listenerRegistration?.remove()
         detailTasks.values.forEach { $0.cancel() }
-        importTask?.cancel()
+        fallbackTask?.cancel()
     }
     
     // 1. Écoute Firebase en temps réel
     func fetchChampionsFromFirebase() {
         listenerRegistration?.remove()
+        fallbackTask?.cancel()
+        fallbackTask = nil
+        hasLoadedFallback = false
+        fallbackGeneration = UUID()
+        listenerGeneration = UUID()
+        let generation = listenerGeneration
         errorMessage = nil
         isLoading = true
         listenerRegistration = db.collection("champions").addSnapshotListener(includeMetadataChanges: true) { @Sendable [weak self] snapshot, error in
             Task { @MainActor [weak self] in
-                self?.receiveSnapshot(snapshot, error: error)
+                guard let self, self.listenerGeneration == generation else { return }
+                self.receiveSnapshot(snapshot, error: error)
             }
         }
     }
@@ -54,17 +73,33 @@ class ChampionViewModel: ObservableObject {
         if let error {
             print("Erreur Firestore: \(error.localizedDescription)")
             errorMessage = "Impossible de charger les champions. Vérifiez votre connexion."
-            isLoading = false
+            if champions.isEmpty { loadRiotFallback(cachedOnly: true) }
+            else { isLoading = false }
             return
         }
 
         guard let snapshot else {
             errorMessage = "Aucune réponse de la base de données."
-            isLoading = false
+            if champions.isEmpty { loadRiotFallback(cachedOnly: true) }
+            else { isLoading = false }
             return
         }
 
         let documents = snapshot.documents
+        if documents.isEmpty {
+            // An empty local query must never erase a valid in-memory fallback.
+            // Only a server-confirmed empty catalog permits a new Riot download.
+            let cachedOnly = snapshot.metadata.isFromCache || snapshot.metadata.hasPendingWrites
+            if cachedOnly && !champions.isEmpty { isLoading = false }
+            else { loadRiotFallback(cachedOnly: cachedOnly) }
+            return
+        }
+
+        // A catalog appeared while a fallback was downloading. Its listener wins.
+        fallbackTask?.cancel()
+        fallbackTask = nil
+        fallbackGeneration = UUID()
+        hasLoadedFallback = false
         var decoded: [(document: QueryDocumentSnapshot, champion: DBChampion)] = []
         var decodingFailures = 0
         for document in documents {
@@ -91,7 +126,7 @@ class ChampionViewModel: ObservableObject {
                 detailLoadingIDs.remove(id)
                 detailErrors[id] = nil
             } else if let details = detailsCache[id] {
-                // An offline snapshot or rejected write must not roll back successful
+                // An offline snapshot must not roll back successful
                 // local downloads. Only detail fields are merged into current metadata.
                 details.apply(to: &champion)
             } else if champion.isDetailLoaded {
@@ -99,48 +134,38 @@ class ChampionViewModel: ObservableObject {
             }
             fetched.append(champion)
         }
-        champions = fetched.sorted { $0.name < $1.name }
+        if !fetched.isEmpty {
+            champions = fetched.sorted { $0.name < $1.name }
+            isFromCache = snapshot.metadata.isFromCache
+        }
         errorMessage = decodingFailures == 0 ? nil : "Certains champions sont illisibles dans la base de données."
         isLoading = false
 
-        // An empty local cache or documents that failed to decode are not an empty
-        // database. Bootstrap only after the server has confirmed no documents exist.
-        if documents.isEmpty && !snapshot.metadata.isFromCache && !snapshot.metadata.hasPendingWrites && !isImporting {
-            syncChampionsFromRiot()
-        }
     }
 
-    // 2. Télécharge depuis Riot et pousse sur Firebase
-    private func syncChampionsFromRiot() {
-        guard let url = DataDragon.catalogURL("champion.json") else { return }
-        guard !isImporting else { return }
-        isImporting = true
-        let collection = db.collection("champions")
-        importTask = Task { [weak self] in
+    // 2. Secours Data Dragon en mémoire uniquement. Le catalogue public est administré côté serveur.
+    private func loadRiotFallback(cachedOnly: Bool) {
+        if hasLoadedFallback && (cachedOnly || fallbackAllowsNetwork) { isLoading = false; return }
+        if fallbackTask != nil {
+            guard !cachedOnly, !fallbackAllowsNetwork else { return }
+            fallbackTask?.cancel()
+        }
+        fallbackAllowsNetwork = !cachedOnly
+        fallbackGeneration = UUID()
+        let generation = fallbackGeneration
+        isLoading = champions.isEmpty
+        fallbackTask = Task { [weak self] in
             do {
-                let data = try await Self.validatedData(from: url)
-                try Task.checkCancellation()
-                let response = try JSONDecoder().decode(APIResponse.self, from: data)
-                guard !response.data.isEmpty, response.data.count <= 500 else {
-                    throw URLError(.cannotParseResponse)
+                let result = try await DataDragon.fetch(APIResponse.self, file: "champion.json", cachedOnly: cachedOnly) { response in
+                    guard !response.data.isEmpty, response.data.count <= 500,
+                          response.data.allSatisfy({ key, champion in key == champion.id && !champion.name.isEmpty }) else {
+                        throw URLError(.cannotParseResponse)
+                    }
                 }
-                // A different client may have populated the catalog during the Riot
-                // download. Check the server again before preparing any writes.
-                let current = try await collection.limit(to: 1).getDocuments(source: .server)
                 try Task.checkCancellation()
-                guard let self else { return }
-                guard current.documents.isEmpty, !current.metadata.isFromCache,
-                      !current.metadata.hasPendingWrites else {
-                    self.isImporting = false
-                    self.importTask = nil
-                    return
-                }
-
-                // Encoded immutable bytes can cross into Firestore's transaction
-                // worker without capturing MainActor-isolated model instances.
-                var encodedChampions: [String: Data] = [:]
-                for apiChamp in response.data.values {
-                    let dbChamp = DBChampion(
+                guard let self, self.fallbackGeneration == generation else { return }
+                self.champions = result.value.data.values.map { apiChamp in
+                    var champion = DBChampion(
                         id: apiChamp.id, name: apiChamp.name, title: apiChamp.title, blurb: apiChamp.blurb, tags: apiChamp.tags,
                         hp: apiChamp.stats.hp, hpperlevel: apiChamp.stats.hpperlevel, mp: apiChamp.stats.mp, mpperlevel: apiChamp.stats.mpperlevel,
                         armor: apiChamp.stats.armor, armorperlevel: apiChamp.stats.armorperlevel, spellblock: apiChamp.stats.spellblock,
@@ -148,55 +173,27 @@ class ChampionViewModel: ObservableObject {
                         attackspeed: apiChamp.stats.attackspeed, attackspeedperlevel: apiChamp.stats.attackspeedperlevel, crit: apiChamp.stats.crit, critperlevel: apiChamp.stats.critperlevel, movespeed: apiChamp.stats.movespeed
                     )
 
-                    encodedChampions[dbChamp.id] = try JSONEncoder().encode(dbChamp)
-                }
-                let records = encodedChampions
-                // Read every target before any write. If another client creates a
-                // champion between the server recheck and commit, abort or retry the
-                // transaction rather than replacing its details, stats or favorites.
-                db.runTransaction({ @Sendable transaction, errorPointer -> Any? in
-                    do {
-                        var writes: [(reference: DocumentReference, fields: [String: Any])] = []
-                        for (id, bytes) in records {
-                            let reference = collection.document(id)
-                            guard !(try transaction.getDocument(reference)).exists else { return nil }
-                            guard let fields = try JSONSerialization.jsonObject(with: bytes) as? [String: Any] else {
-                                throw URLError(.cannotParseResponse)
-                            }
-                            writes.append((reference, fields))
-                        }
-                        for write in writes {
-                            transaction.setData(write.fields, forDocument: write.reference)
-                        }
-                        return nil
-                    } catch {
-                        errorPointer?.pointee = error as NSError
-                        return nil
+                    champion.isFavorite = FavoritesStore.shared.isFavorite(champion.id)
+                    if let details = self.detailsCache[champion.id] {
+                        details.apply(to: &champion)
                     }
-                }) { @Sendable [weak self] _, error in
-                    Task { @MainActor [weak self] in
-                        guard let self else { return }
-                        self.isImporting = false
-                        if let error {
-                            self.errorMessage = "Importation des champions impossible. Réessayez plus tard."
-                            print("Erreur d'importation : \(error)")
-                        }
-                    }
-                }
-                self.importTask = nil
+                    return champion
+                }.sorted { $0.name < $1.name }
+                self.hasLoadedFallback = true
+                self.isFromCache = result.isFromCache
+                self.isLoading = false
+                self.errorMessage = nil
+                self.fallbackTask = nil
             } catch {
-                guard let self else { return }
-                self.importTask = nil
-                self.isImporting = false
-                if !Task.isCancelled {
-                    self.errorMessage = "Importation des champions impossible. Réessayez plus tard."
-                    print("Erreur d'importation : \(error)")
-                }
+                guard !Task.isCancelled, let self, self.fallbackGeneration == generation else { return }
+                self.fallbackTask = nil
+                self.isLoading = false
+                self.errorMessage = "Les champions sont indisponibles. Connectez-vous à Internet puis réessayez."
             }
         }
     }
     
-    // 3. Charge les détails du champion (Sorts, Skins) et met à jour Firebase
+    // 3. Charge les détails du champion (Sorts, Skins) avec un cache disque Data Dragon.
     func loadDetails(for champion: DBChampion) async {
         guard !Task.isCancelled else { return }
         let id = champion.id
@@ -224,9 +221,6 @@ class ChampionViewModel: ObservableObject {
                 self.detailsCache[id] = details
                 self.apply(details, to: id)
                 self.finishLoadingDetails(for: id)
-                // Publish first. Reading the champion must never depend on write
-                // permission, network connectivity, or the listener's next snapshot.
-                self.persist(details, for: id)
             } catch {
                 guard let self else { return }
                 self.finishLoadingDetails(for: id)
@@ -264,39 +258,19 @@ class ChampionViewModel: ObservableObject {
         }
     }
 
-    private func persist(_ details: ChampionDetails, for id: String) {
-        db.collection("champions").document(id).updateData(details.firestoreFields) { @Sendable error in
-            if let error {
-                // The in-memory data stays usable even when Firestore is read-only.
-                print("Détails de \(id) disponibles localement, synchronisation impossible : \(error)")
-            }
-        }
-    }
-
     private static func downloadDetails(for id: String) async throws -> ChampionDetails {
-        guard let url = DataDragon.catalogURL("champion/\(id).json") else {
-            throw URLError(.badURL)
+        let result = try await DataDragon.fetch(APIDetailResponse.self, file: "champion/\(id).json") { response in
+            guard let details = response.data[id], !details.spells.isEmpty,
+                  !details.passive.name.isEmpty else { throw URLError(.cannotParseResponse) }
         }
-        let data = try await validatedData(from: url)
         try Task.checkCancellation()
-        let response = try JSONDecoder().decode(APIDetailResponse.self, from: data)
-        guard let details = response.data[id] else {
+        guard let details = result.value.data[id] else {
             throw URLError(.cannotParseResponse)
         }
         return ChampionDetails(details: details, championID: id)
     }
 
-    private static func validatedData(from url: URL) async throws -> Data {
-        let request = URLRequest(url: url, timeoutInterval: 30)
-        let (data, response) = try await URLSession.shared.data(for: request)
-        guard let response = response as? HTTPURLResponse,
-              (200...299).contains(response.statusCode) else {
-            throw URLError(.badServerResponse)
-        }
-        return data
-    }
-    
-    // 4. Modifie uniquement les favoris locaux
+    // 4. Modifie uniquement les favoris du compte connecté.
     func toggleFavorite(for champion: DBChampion) {
         FavoritesStore.shared.toggle(champion.id)
         if let index = champions.firstIndex(where: { $0.id == champion.id }) {
@@ -351,17 +325,4 @@ private struct ChampionDetails {
         champion.isDetailLoaded = true
     }
 
-    var firestoreFields: [String: Any] {
-        [
-            "allyTips": allyTips,
-            "enemyTips": enemyTips,
-            "skins": skins.map { ["name": $0.name, "num": $0.num, "championId": $0.championId] as [String: Any] },
-            "spells": spells.map { ["id": $0.id, "name": $0.name, "desc": $0.desc] },
-            "passiveName": passiveName,
-            "passiveDesc": passiveDesc,
-            "passiveImage": passiveImage,
-            "fullLore": fullLore,
-            "isDetailLoaded": true
-        ]
-    }
 }

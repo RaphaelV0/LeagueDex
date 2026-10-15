@@ -6,9 +6,14 @@ import PackageDescription
 let package = Package(
     name: "LeagueDexARAMCore",
     platforms: [.macOS(.v13)],
-    products: [.library(name: "ARAMCore", targets: ["ARAMCore"])],
+    products: [
+        .library(name: "ARAMCore", targets: ["ARAMCore"]),
+        .library(name: "SyncCore", targets: ["SyncCore"])
+    ],
     targets: [
         .target(name: "ARAMCore", path: "LeagueDex/ARAMCore"),
-        .testTarget(name: "ARAMCoreTests", dependencies: ["ARAMCore"], path: "Tests/ARAMCoreTests")
+        .testTarget(name: "ARAMCoreTests", dependencies: ["ARAMCore"], path: "Tests/ARAMCoreTests"),
+        .target(name: "SyncCore", path: "LeagueDex/SyncCore"),
+        .testTarget(name: "SyncCoreTests", dependencies: ["SyncCore"], path: "Tests/SyncCoreTests")
     ]
 )
