@@ -4,15 +4,18 @@ struct ChampionDetailView: View {
     let championId: String
     @ObservedObject var viewModel: ChampionViewModel
     private let initialFallback: DBChampion
+    private let onGalleryChange: (Bool) -> Void
 
     var champion: DBChampion {
         viewModel.champions.first(where: { $0.id == championId }) ?? initialFallback
     }
 
-    init(champion: DBChampion, viewModel: ChampionViewModel) {
+    init(champion: DBChampion, viewModel: ChampionViewModel,
+         onGalleryChange: @escaping (Bool) -> Void = { _ in }) {
         self.initialFallback = champion
         self.championId = champion.id
         self.viewModel = viewModel
+        self.onGalleryChange = onGalleryChange
     }
 
     @ScaledMetric(relativeTo: .largeTitle) private var scalableHeroHeight: CGFloat = 320
@@ -30,7 +33,6 @@ struct ChampionDetailView: View {
             ScrollView {
                 VStack(alignment: .leading, spacing: 0) {
                     hero
-                        .leagueReveal()
 
                     VStack(alignment: .leading, spacing: LeagueTheme.Space.lg) {
                         identity
@@ -40,28 +42,35 @@ struct ChampionDetailView: View {
                             .foregroundStyle(LeagueTheme.muted)
                             .accessibilityAddTraits(.isStaticText)
                         sectionShortcuts(proxy: scrollProxy)
-                            .leagueReveal()
 
                         if champion.isDetailLoaded {
                             skillsSection
                                 .id("skills")
-                                .leagueReveal()
+                        } else if let message = viewModel.detailError(for: championId) {
+                            LeagueErrorState(message: message) {
+                                Task { await viewModel.loadDetails(for: champion) }
+                            }
+                        } else if viewModel.isLoadingDetails(for: championId) {
+                            HStack(spacing: LeagueTheme.Space.sm) {
+                                ProgressView().tint(LeagueTheme.gold)
+                                Text("Chargement des compétences et apparences…")
+                                    .font(.footnote)
+                                    .foregroundStyle(LeagueTheme.muted)
+                            }
+                            .accessibilityElement(children: .combine)
                         }
 
                         statsSection
                             .id("stats")
-                            .leagueReveal()
 
                         if !champion.allyTips.isEmpty || !champion.enemyTips.isEmpty {
                             tipsSection
                                 .id("tips")
-                                .leagueReveal()
                         }
 
                         if !champion.skins.isEmpty {
                             skinsSection
                                 .id("skins")
-                                .leagueReveal()
                         }
 
                         if !champion.fullLore.isEmpty {
@@ -81,7 +90,6 @@ struct ChampionDetailView: View {
             }
             .background(LeagueTheme.background)
         }
-        .id(champion.id)
         // Respect the navigation bar and safe area: a new ARAM detail must fill
         // the available screen without appearing under the status/navigation bars.
         .navigationBarTitleDisplayMode(.inline)
@@ -97,14 +105,19 @@ struct ChampionDetailView: View {
                 .accessibilityLabel(champion.isFavorite ? "Retirer des favoris" : "Ajouter aux favoris")
             }
         }
-        .task {
+        .task(id: championId) {
             await viewModel.loadDetails(for: champion)
+            guard !Task.isCancelled else { return }
             selectPassiveIfNeeded()
         }
         .onChange(of: champion.isDetailLoaded) { loaded in
             if loaded { selectPassiveIfNeeded() }
         }
-        .fullScreenCover(item: $selectedSkin) { skin in
+        .fullScreenCover(item: $selectedSkin, onDismiss: {
+            // Resume a deferred ARAM selection only after the skin cover has
+            // fully dismissed, keeping its image and champion name together.
+            onGalleryChange(false)
+        }) { skin in
             SkinFullscreenView(skin: skin, championName: champion.name)
         }
     }
@@ -350,6 +363,7 @@ struct ChampionDetailView: View {
                 LazyHStack(spacing: LeagueTheme.Space.md) {
                     ForEach(champion.skins) { skin in
                         Button {
+                            onGalleryChange(true)
                             selectedSkin = skin
                         } label: {
                             ZStack(alignment: .bottomLeading) {

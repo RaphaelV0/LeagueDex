@@ -15,6 +15,9 @@ cd "$(dirname "$0")/.."
 
 echo "Xcode version:"
 xcodebuild -version
+echo "Running native ARAM selection, filtering and lifecycle tests..."
+swift test --parallel
+
 echo "Checking the LeagueDex project and available schemes..."
 xcodebuild -list -project LeagueDex.xcodeproj
 
