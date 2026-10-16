@@ -92,7 +92,7 @@ struct AuthenticationView: View {
                     .leagueSurface(radius: LeagueTheme.Corner.panel)
                     .disabled(auth.isBusy)
 
-                    Text("Retrouvez vos favoris et vos builds avec votre compte.")
+                    Text("Retrouvez vos champions favoris avec votre compte Firebase.")
                         .font(.footnote)
                         .foregroundStyle(LeagueTheme.muted)
                         .frame(maxWidth: .infinity)
