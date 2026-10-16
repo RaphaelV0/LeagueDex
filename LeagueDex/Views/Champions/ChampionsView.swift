@@ -218,7 +218,6 @@ struct ChampionsView: View {
         selectedRole = "Tous"
         showOnlyFavorites = false
     }
-
 }
 
 private struct ARAMChampionPresentation: View {

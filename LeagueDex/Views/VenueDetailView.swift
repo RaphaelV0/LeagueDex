@@ -6,12 +6,7 @@ import CoreLocation
 struct VenueDetailView: View {
     let venue: DBVenue
     let userCoordinate: CLLocationCoordinate2D?
-    @ObservedObject var viewModel: VenueViewModel
-
     @Environment(\.dismiss) private var dismiss
-    @State private var showingReportOptions = false
-    @State private var reportStatus: String?
-    @State private var reportInProgress = false
 
     private var routeURL: URL? {
         URL(string: "https://maps.apple.com/?daddr=\(venue.latitude),\(venue.longitude)&dirflg=d")
@@ -136,21 +131,6 @@ struct VenueDetailView: View {
                         .padding(LeagueTheme.Space.md)
                         .leagueSurface()
                     }
-                    Button {
-                        showingReportOptions = true
-                    } label: {
-                        Label("Signaler une erreur sur ce lieu", systemImage: "exclamationmark.bubble")
-                            .font(.subheadline)
-                            .foregroundStyle(LeagueTheme.gold)
-                            .frame(minHeight: 44)
-                    }
-                    .disabled(reportInProgress)
-                    if let reportStatus {
-                        Text(reportStatus)
-                            .font(.footnote)
-                            .foregroundStyle(LeagueTheme.muted)
-                            .fixedSize(horizontal: false, vertical: true)
-                    }
                 }
                 .padding(LeagueTheme.Space.md)
                 .padding(.bottom, LeagueTheme.Space.xl)
@@ -165,31 +145,5 @@ struct VenueDetailView: View {
             }
         }
         .tint(LeagueTheme.gold)
-        .confirmationDialog(
-            "Pourquoi signaler ce lieu ?",
-            isPresented: $showingReportOptions,
-            titleVisibility: .visible
-        ) {
-            ForEach(["Adresse incorrecte", "Établissement fermé",
-                     "Informations erronées", "Autre"], id: \.self) { reason in
-                Button(reason) {
-                    Task { await sendReport(reason) }
-                }
-            }
-            Button("Annuler", role: .cancel) {}
-        }
-    }
-
-    @MainActor
-    private func sendReport(_ reason: String) async {
-        guard !reportInProgress else { return }
-        reportInProgress = true
-        defer { reportInProgress = false }
-        do {
-            try await viewModel.reportVenue(venue, reason: reason)
-            reportStatus = "Signalement enregistré pour vérification."
-        } catch {
-            reportStatus = "Impossible d'enregistrer le signalement : \(error.localizedDescription)"
-        }
     }
 }

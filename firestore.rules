@@ -1,156 +1,72 @@
 rules_version = '2';
 service cloud.firestore {
   match /databases/{database}/documents {
-    function signedIn() {
+    function connected() {
       return request.auth != null;
     }
     function owner(uid) {
-      return signedIn() && request.auth.uid == uid;
+      return connected() && request.auth.uid == uid;
     }
-    function administrator() {
-      return signedIn() && request.auth.token.get('admin', false) == true;
-    }
-    function identifier(value) {
-      return value is string && value.size() > 0 && value.size() <= 120;
-    }
-    function itemAt(items, index) {
-      return items.size() <= index || identifier(items[index]);
-    }
-    function validBuild(data) {
-      return data.keys().hasAll(['name', 'championID', 'itemIDs', 'revision', 'mutationID', 'createdAt', 'updatedAt', 'deleted'])
-        && data.keys().hasOnly(['name', 'championID', 'itemIDs', 'revision', 'mutationID', 'createdAt', 'updatedAt', 'deleted'])
-        && data.name is string && data.name.size() > 0 && data.name.size() <= 80
-        && identifier(data.championID)
-        && data.itemIDs is list && data.itemIDs.size() <= 6
-        && itemAt(data.itemIDs, 0) && itemAt(data.itemIDs, 1) && itemAt(data.itemIDs, 2)
-        && itemAt(data.itemIDs, 3) && itemAt(data.itemIDs, 4) && itemAt(data.itemIDs, 5)
-        && data.revision is int && data.revision >= 1 && identifier(data.mutationID)
-        && data.deleted is bool && data.createdAt is timestamp
-        && data.updatedAt == request.time;
-    }
-    function validComparison(data) {
-      return data.keys().hasAll(['leftID', 'rightID', 'level', 'updatedAt'])
-        && data.keys().hasOnly(['leftID', 'rightID', 'level', 'updatedAt'])
-        && identifier(data.leftID) && identifier(data.rightID) && data.leftID != data.rightID
-        && data.level is int && data.level >= 1 && data.level <= 18
-        && data.updatedAt == request.time;
-    }
-    function validQuiz(data, runID) {
-      return data.keys().hasAll(['category', 'difficulty', 'score', 'correct', 'total', 'completedAt', 'dayKey'])
-        && data.keys().hasOnly(['category', 'difficulty', 'score', 'correct', 'total', 'completedAt', 'dayKey'])
-        && data.category is string && data.category.size() > 0 && data.category.size() <= 80
-        && data.difficulty is string && data.difficulty.size() > 0 && data.difficulty.size() <= 80
-        && data.total is int && data.total >= 1 && data.total <= 100
-        && data.correct is int && data.correct >= 0 && data.correct <= data.total
-        && data.score is int && data.score == data.correct * 100
-        && data.completedAt == request.time && data.dayKey is string
-        && ((data.dayKey == '' && !runID.matches('daily-.*'))
-          || (data.dayKey.matches('[0-9]{4}-(0[1-9]|1[0-2])-(0[1-9]|[12][0-9]|3[01])')
-            && runID == 'daily-' + data.dayKey));
+    function admin() {
+      return connected() && request.auth.token.get('admin', false) == true;
     }
 
-    // UTC daily identifiers are derived from trusted server time, not device time.
-    function todayKey() {
-      return string(request.time.year()) + '-' + string(request.time.month()) + '-' + string(request.time.day());
-    }
-    function validProposal(data) {
-      return data.keys().hasAll(['authorUID', 'name', 'address', 'latitude', 'longitude', 'type', 'status', 'createdAt'])
-        && data.keys().hasOnly(['authorUID', 'name', 'address', 'latitude', 'longitude', 'type', 'status', 'createdAt',
-                                'openingHours', 'phone', 'website', 'details'])
+    // A connected user may add a public venue, but cannot alter another
+    // venue afterwards. Validate all submitted fields on the server.
+    function validNewVenue(data) {
+      return data.keys().hasAll([
+          'name', 'address', 'latitude', 'longitude',
+          'type', 'authorUID', 'createdAt'
+        ])
+        && data.keys().hasOnly([
+          'name', 'address', 'latitude', 'longitude', 'type',
+          'openingHours', 'phone', 'website', 'details',
+          'authorUID', 'createdAt'
+        ])
         && data.authorUID == request.auth.uid
+        && data.createdAt == request.time
         && data.name is string && data.name.size() > 0 && data.name.size() <= 120
         && data.address is string && data.address.size() > 0 && data.address.size() <= 250
         && data.latitude is number && data.latitude >= -90 && data.latitude <= 90
         && data.longitude is number && data.longitude >= -180 && data.longitude <= 180
         && data.type in ['Bar E-sport', 'Salle LAN', 'Autre lieu gaming']
-        && data.status == 'pending' && data.createdAt == request.time
-        && data.get('openingHours', '') is string && data.get('openingHours', '').size() <= 500
+        && data.get('openingHours', '') is string
+        && data.get('openingHours', '').size() <= 500
         && data.get('phone', '') is string && data.get('phone', '').size() <= 60
         && data.get('website', '') is string && data.get('website', '').size() <= 300
         && data.get('details', '') is string && data.get('details', '').size() <= 1500;
     }
-    function validVenueReport(data) {
-      return data.keys().hasAll(['authorUID', 'venueID', 'reason', 'createdAt'])
-        && data.keys().hasOnly(['authorUID', 'venueID', 'reason', 'createdAt'])
-        && data.authorUID == request.auth.uid
-        && identifier(data.venueID)
-        && data.reason in ['Adresse incorrecte', 'Établissement fermé', 'Informations erronées', 'Autre']
-        && data.createdAt == request.time;
-    }
 
-    // Only explicitly listed private collections are accessible. Parent documents,
-    // future subcollections and collection-group requests have no blanket grant.
+    // Each account can read and update only its own champion favorites.
+    // Tombstones preserve explicit deselections through legacy migrations.
     match /users/{uid}/favorites/{championID} {
       allow read: if owner(uid);
       allow create, update: if owner(uid)
+        && championID.size() > 0 && championID.size() <= 120
         && request.resource.data.keys().hasAll(['championID', 'selected', 'updatedAt'])
         && request.resource.data.keys().hasOnly(['championID', 'selected', 'updatedAt'])
-        && identifier(championID) && request.resource.data.championID == championID
+        && request.resource.data.championID == championID
         && request.resource.data.selected is bool
         && request.resource.data.updatedAt == request.time;
-      // Preserve deselection tombstones so local migration cannot revive favorites.
       allow delete: if false;
-    }
-    match /users/{uid}/builds/{buildID} {
-      allow read: if owner(uid);
-      allow create: if owner(uid) && validBuild(request.resource.data)
-        && request.resource.data.revision == 1
-        && request.resource.data.createdAt == request.time;
-      allow update: if owner(uid) && validBuild(request.resource.data)
-        && request.resource.data.revision == resource.data.revision + 1
-        && request.resource.data.mutationID != resource.data.mutationID
-        && request.resource.data.createdAt == resource.data.createdAt;
-      // Deleted builds are versioned tombstones, allowing stale-device conflicts.
-      allow delete: if false;
-    }
-    match /users/{uid}/comparisons/{comparisonID} {
-      allow read, delete: if owner(uid);
-      allow create, update: if owner(uid) && validComparison(request.resource.data);
-    }
-    match /users/{uid}/quizRuns/{runID} {
-      allow read: if owner(uid);
-      allow create: if owner(uid) && validQuiz(request.resource.data, runID);
-      // Personal history and a daily participation cannot be rewritten or reset.
-      allow update, delete: if false;
     }
 
-    // Account-owned community drafts, one immutable new proposal per UTC day.
-    // Approval never grants the client rights to publish public /venues entries.
-    match /users/{uid}/venueProposals/{proposalID} {
-      allow read: if owner(uid) || administrator();
-      allow create: if owner(uid)
-        && proposalID == todayKey()
-        && validProposal(request.resource.data);
-      allow update: if administrator()
-        && resource.data.status == 'pending'
-        && request.resource.data.diff(resource.data).affectedKeys()
-          .hasOnly(['status', 'reviewedAt', 'reviewedBy'])
-        && request.resource.data.status in ['approved', 'rejected']
-        && request.resource.data.reviewedAt == request.time
-        && request.resource.data.reviewedBy == request.auth.uid;
-      allow delete: if false;
+    // Champions and items remain read-only for app users; venues accept only validated new entries.
+    match /champions/{id} {
+      allow read: if connected();
+      allow write: if admin();
     }
-    // Once-per-venue-per-day reports, private to their author and moderators.
-    match /users/{uid}/venueReports/{reportID} {
-      allow read: if owner(uid) || administrator();
-      allow create: if owner(uid) && validVenueReport(request.resource.data)
-        && reportID == request.resource.data.venueID + '_' + todayKey();
-      allow update, delete: if false;
+    match /items/{id} {
+      allow read: if connected();
+      allow write: if admin();
+    }
+    match /venues/{id} {
+      allow read: if connected();
+      allow create: if admin() || (connected() && validNewVenue(request.resource.data));
+      allow update, delete: if admin();
     }
 
-    match /champions/{championID} {
-      allow read: if signedIn();
-      allow write: if administrator();
-    }
-    match /items/{itemID} {
-      allow read: if signedIn();
-      allow write: if administrator();
-    }
-    // Only privileged moderators can publish reviewed entries.
-    // Authenticated users contribute through private proposals and reports.
-    match /venues/{venueID} {
-      allow read: if signedIn();
-      allow write: if administrator();
-    }
+    // No access is granted to retired premium collections. Existing documents
+    // are NOT deleted; Admin SDK can export them for backup if needed.
   }
 }

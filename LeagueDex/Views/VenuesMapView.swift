@@ -2,250 +2,117 @@ import SwiftUI
 import MapKit
 import CoreLocation
 
-private enum VenueKind: String, CaseIterable, Identifiable {
-    case all = "Tous"
-    case bars = "Bars e-sport"
-    case lan = "Salles LAN"
-    case other = "Autres"
-
-    var id: Self { self }
-
-    func includes(_ venue: DBVenue) -> Bool {
-        let isBar = venue.type.localizedCaseInsensitiveContains("bar")
-        let isLAN = venue.type.localizedCaseInsensitiveContains("LAN")
-        switch self {
-        case .all: return true
-        case .bars: return isBar
-        case .lan: return isLAN
-        case .other: return !isBar && !isLAN
-        }
-    }
-}
-
+/// A simple, read-only map of the e-sport venues stored in Firestore.
 struct VenuesMapView: View {
-    @StateObject private var viewModel: VenueViewModel
+    @StateObject private var viewModel = VenueViewModel()
     @StateObject private var locationManager = LocationManager()
     @State private var searchText = ""
-    @State private var maximumDistanceKM = 0.0
-    @State private var showingMyProposals = false
-
-    init(uid: String) {
-        _viewModel = StateObject(wrappedValue: VenueViewModel(uid: uid))
-    }
-
+    @State private var selectedVenue: DBVenue?
+    @State private var showingAddVenue = false
+    @State private var focusWhenLocated = false
     @State private var cameraPosition: MapCameraPosition = .region(
         MKCoordinateRegion(
             center: CLLocationCoordinate2D(latitude: 46.6033, longitude: 1.8883),
             span: MKCoordinateSpan(latitudeDelta: 6, longitudeDelta: 6)
         )
     )
-    @State private var selectedKind: VenueKind = .all
-    @State private var selectedVenue: DBVenue?
-    @State private var addingVenue = false
-    @Environment(\.accessibilityReduceMotion) private var reduceMotion
 
     private var visibleVenues: [DBVenue] {
         viewModel.venues.filter { venue in
-            guard selectedKind.includes(venue),
-                  searchText.isEmpty || venue.name.localizedStandardContains(searchText)
-                    || venue.address.localizedStandardContains(searchText) else { return false }
-            guard maximumDistanceKM > 0,
-                  let coordinate = locationManager.userLocation else { return true }
-            let user = CLLocation(latitude: coordinate.latitude, longitude: coordinate.longitude)
-            let place = CLLocation(latitude: venue.latitude, longitude: venue.longitude)
-            return user.distance(from: place) <= maximumDistanceKM * 1_000
+            searchText.isEmpty || venue.name.localizedStandardContains(searchText)
+                || venue.address.localizedStandardContains(searchText)
         }
     }
 
     var body: some View {
         NavigationStack {
             VStack(spacing: 0) {
-                ScrollView(.horizontal, showsIndicators: false) {
-                    HStack(spacing: LeagueTheme.Space.sm) {
-                        ForEach(VenueKind.allCases) { kind in
-                            LeagueFilterChip(title: kind.rawValue,
-                                             isSelected: selectedKind == kind) {
-                                selectedKind = kind
-                            }
-                        }
-                    }
-                    .padding(.horizontal, LeagueTheme.Space.md)
-                    .padding(.vertical, LeagueTheme.Space.sm)
-                }
-                .background(LeagueTheme.surface)
-
-                HStack(spacing: LeagueTheme.Space.sm) {
-                    Text("\(visibleVenues.count) lieux")
-                        .font(.subheadline.weight(.semibold))
-                        .foregroundStyle(LeagueTheme.muted)
-                        .lineLimit(1)
-                        .minimumScaleFactor(0.8)
-                    Spacer(minLength: 4)
-
-                    Menu {
-                        ForEach(visibleVenues) { venue in
-                            Button(venue.name) { focus(on: venue) }
-                        }
-                    } label: {
-                        Image(systemName: "list.bullet")
-                            .frame(width: 44, height: 44)
-                            .foregroundStyle(LeagueTheme.gold)
-                    }
-                    .accessibilityLabel("Choisir un lieu dans la liste")
-
-                    Menu {
-                        Button("Toutes les distances") { maximumDistanceKM = 0 }
-                        Button("Moins de 10 km") { maximumDistanceKM = 10 }
-                        Button("Moins de 25 km") { maximumDistanceKM = 25 }
-                        Button("Moins de 50 km") { maximumDistanceKM = 50 }
-                        Button("Moins de 100 km") { maximumDistanceKM = 100 }
-                    } label: {
-                        Image(systemName: "line.3.horizontal.decrease.circle")
-                            .frame(width: 44, height: 44)
-                            .foregroundStyle(LeagueTheme.gold)
-                    }
-                    .disabled(locationManager.userLocation == nil)
-                    .accessibilityLabel("Filtrer les lieux par distance")
-                    .accessibilityValue(maximumDistanceKM == 0 ? "Toutes distances" : "Moins de \(Int(maximumDistanceKM)) kilomètres")
-
-                    Button(action: focusOnUser) {
-                        Image(systemName: "location.fill")
-                            .frame(width: 44, height: 44)
-                            .foregroundStyle(LeagueTheme.gold)
-                    }
-                    .accessibilityLabel("Recentrer ou actualiser ma position")
-
-                    Button { addingVenue = true } label: {
-                        Image(systemName: "plus.circle.fill")
-                            .frame(width: 44, height: 44)
-                            .font(.title3)
-                            .foregroundStyle(LeagueTheme.gold)
-                    }
-                    .accessibilityLabel("Ajouter un lieu sur la carte")
-                }
-                .padding(.horizontal, LeagueTheme.Space.md)
-                .background(LeagueTheme.background)
-
-                if let error = viewModel.errorMessage {
-                    Text(error)
-                        .font(.caption)
+                if let message = viewModel.errorMessage {
+                    Text(message)
+                        .font(.footnote)
                         .foregroundStyle(LeagueTheme.danger)
-                        .frame(maxWidth: .infinity, alignment: .leading)
                         .padding(LeagueTheme.Space.md)
-                        .background(LeagueTheme.surface)
+                } else if visibleVenues.isEmpty {
+                    Text("Aucun lieu disponible dans Firebase ou dans le cache.")
+                        .font(.footnote)
+                        .foregroundStyle(LeagueTheme.muted)
+                        .padding(LeagueTheme.Space.md)
                 }
 
-                if let warning = locationManager.locationError {
-                    HStack(spacing: LeagueTheme.Space.sm) {
-                        Text(warning)
-                            .font(.caption)
-                            .foregroundStyle(LeagueTheme.muted)
-                        Spacer(minLength: 0)
-                        if locationManager.authorizationStatus != .denied
-                            && locationManager.authorizationStatus != .restricted {
-                            Button("Réessayer") { locationManager.requestLocation() }
-                                .font(.caption.weight(.bold))
-                                .foregroundStyle(LeagueTheme.gold)
-                        }
-                    }
-                    .padding(LeagueTheme.Space.md)
-                    .background(LeagueTheme.surface)
-                }
-
-                ZStack(alignment: .topTrailing) {
-                    Map(position: $cameraPosition) {
-                        UserAnnotation()
-                        ForEach(visibleVenues) { venue in
-                            Annotation(venue.name, coordinate: venue.coordinate) {
-                                Button {
-                                    selectedVenue = venue
-                                } label: {
-                                    Image(systemName: "gamecontroller.fill")
-                                        .font(.system(size: 16, weight: .bold))
-                                        .foregroundStyle(LeagueTheme.background)
-                                        .frame(width: 46, height: 46)
-                                        .background(LeagueTheme.gold, in: Circle())
-                                        .overlay {
-                                            Circle()
-                                                .strokeBorder(LeagueTheme.text.opacity(0.65), lineWidth: 1)
-                                        }
-                                        .shadow(color: .black.opacity(0.2), radius: 5)
-                                }
-                                .buttonStyle(.plain)
-                                .accessibilityLabel("Détails de \(venue.name), \(venue.type)")
+                Map(position: $cameraPosition) {
+                    UserAnnotation()
+                    ForEach(visibleVenues) { venue in
+                        Annotation(venue.name, coordinate: venue.coordinate) {
+                            Button {
+                                selectedVenue = venue
+                            } label: {
+                                Image(systemName: "gamecontroller.fill")
+                                    .font(.system(size: 17, weight: .bold))
+                                    .foregroundStyle(LeagueTheme.background)
+                                    .frame(width: 44, height: 44)
+                                    .background(LeagueTheme.gold, in: Circle())
                             }
+                            .buttonStyle(.plain)
+                            .accessibilityLabel("Afficher \(venue.name)")
                         }
                     }
-                    .accessibilityLabel("Carte interactive des lieux e-sport")
-
-                    if locationManager.isLocating {
-                        ProgressView()
-                            .tint(LeagueTheme.gold)
-                            .padding(LeagueTheme.Space.md)
-                            .background(LeagueTheme.surface, in: Circle())
-                            .padding(LeagueTheme.Space.md)
-                            .accessibilityLabel("Localisation en cours")
-                    }
                 }
+                .accessibilityLabel("Carte des lieux e-sport")
+
+                Text("\(visibleVenues.count) lieux affichés")
+                    .font(.caption)
+                    .foregroundStyle(LeagueTheme.muted)
+                    .frame(maxWidth: .infinity, alignment: .leading)
+                    .padding(LeagueTheme.Space.md)
             }
             .background(LeagueTheme.background)
             .navigationTitle("Lieux e-sport")
-            .navigationBarTitleDisplayMode(.inline)
-            .searchable(text: $searchText, prompt: "Nom, ville ou adresse")
+            .searchable(text: $searchText, prompt: "Rechercher un lieu ou une ville")
             .toolbar {
                 ToolbarItem(placement: .topBarLeading) {
                     Button {
-                        showingMyProposals = true
+                        showingAddVenue = true
                     } label: {
-                        Image(systemName: "clock.arrow.circlepath")
+                        Image(systemName: "plus.circle.fill")
                     }
-                    .accessibilityLabel("Suivre mes propositions de lieux")
+                    .accessibilityLabel("Ajouter un lieu sur la carte")
                 }
+
                 ToolbarItem(placement: .topBarTrailing) {
-                    Button { addingVenue = true } label: {
-                        Image(systemName: "plus")
+                    Button {
+                        if let coordinate = locationManager.userLocation {
+                            focus(on: coordinate)
+                        } else {
+                            focusWhenLocated = true
+                            locationManager.requestLocation()
+                        }
+                    } label: {
+                        Image(systemName: "location.fill")
                     }
-                    .accessibilityLabel("Proposer un nouveau lieu")
+                    .accessibilityLabel("Me localiser")
                 }
             }
             .sheet(item: $selectedVenue) { venue in
-                VenueDetailView(venue: venue, userCoordinate: locationManager.userLocation,
-                                viewModel: viewModel)
+                VenueDetailView(venue: venue, userCoordinate: locationManager.userLocation)
             }
-            .sheet(isPresented: $addingVenue) {
-                AddVenueView(viewModel: viewModel)
+            .sheet(isPresented: $showingAddVenue) {
+                AddVenueView(viewModel: viewModel) { coordinate in
+                    searchText = ""
+                    focus(on: coordinate)
+                }
             }
-            .sheet(isPresented: $showingMyProposals) {
-                VenueProposalsView(viewModel: viewModel)
+            .onChange(of: locationManager.userLocation?.latitude) { _, _ in
+                guard focusWhenLocated, let coordinate = locationManager.userLocation else { return }
+                focusWhenLocated = false
+                focus(on: coordinate)
             }
-            .onAppear { locationManager.requestLocation() }
         }
     }
 
-    private func focus(on venue: DBVenue) {
-        withAnimation(reduceMotion ? nil : LeagueMotion.standard) {
-            cameraPosition = .region(
-                MKCoordinateRegion(
-                    center: venue.coordinate,
-                    span: MKCoordinateSpan(latitudeDelta: 0.07, longitudeDelta: 0.07)
-                )
-            )
-        }
-        selectedVenue = venue
-    }
-
-    private func focusOnUser() {
-        guard let coordinate = locationManager.userLocation else {
-            locationManager.requestLocation()
-            return
-        }
-        withAnimation(reduceMotion ? nil : LeagueMotion.standard) {
-            cameraPosition = .region(
-                MKCoordinateRegion(
-                    center: coordinate,
-                    span: MKCoordinateSpan(latitudeDelta: 0.08, longitudeDelta: 0.08)
-                )
-            )
-        }
+    private func focus(on coordinate: CLLocationCoordinate2D) {
+        cameraPosition = .region(MKCoordinateRegion(
+            center: coordinate,
+            span: MKCoordinateSpan(latitudeDelta: 0.08, longitudeDelta: 0.08)
+        ))
     }
 }

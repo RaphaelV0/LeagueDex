@@ -43,7 +43,7 @@ private struct AuthenticationGate: View {
             } else if let uid = auth.uid {
                 // The store binds private data before publishing uid. Only this branch
                 // constructs catalog views, and each account receives a fresh view tree.
-                MainTabView(uid: uid)
+                MainTabView()
                     .environmentObject(auth)
                     .id(uid)
             } else {

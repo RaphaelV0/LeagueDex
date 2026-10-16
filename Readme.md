@@ -1,87 +1,66 @@
-# ⚔️ LeagueDex
+# LeagueDex — Projet Master 2 iOS
 
-## Raphaël Verchain — Master 2 CCM (Cours iOS)
+LeagueDex est une encyclopédie **League of Legends** réalisée en SwiftUI. Le but est de présenter une application iPhone fiable et facile à expliquer : Firebase, une interface native, une carte et le capteur de mouvement.
 
-Une application iOS native, fluide et moderne, développée dans le cadre de mon Master 2 (cours iOS). Elle sert d'encyclopédie (façon Pokédex) pour l'univers de **League of Legends**. 
-Retrouvez toutes les informations sur vos champions préférés, les objets du jeu, et localisez les lieux e-sport autour de vous grâce à une architecture cloud moderne, des capteurs matériels natifs et un support hors-ligne optimisé.
+## Fonctionnalités conservées
 
----
+1. **Compte Firebase** : inscription, connexion, déconnexion et session persistante avec Firebase Authentication.
+2. **Champions** : catalogue Firestore, recherche, filtres, fiches, statistiques du niveau 1 au niveau 18, compétences, histoires et galerie de skins avec zoom.
+3. **Favoris** : sélection de champions synchronisée dans `users/{uid}/favorites`.
+4. **Mode ARAM** : dans l'onglet Champions, **secouer physiquement l'iPhone** choisit un champion aléatoire. Une deuxième secousse **depuis cette même fiche** remplace le champion sans empiler les pages. La fiche ouverte manuellement dans Champions accepte aussi ce geste. **Aucun bouton de tirage.**
+5. **Objets** : catalogue Firestore des objets, recherche, description et prix.
+6. **Lieux e-sport** : carte MapKit des lieux Firestore `venues`, recherche, fiche et itinéraire Apple Plans. Un compte connecté peut **ajouter un lieu** via le bouton **+** après vérification de l'adresse avec Apple Plans. La localisation GPS est facultative.
 
-## 🌟 Fonctionnalités Principales
+Le menu comporte quatre onglets : **Champions, Objets, Lieux, Compte**.
 
-*   **📚 Encyclopédie des Champions :** Accédez aux statistiques dynamiques (évolutives du niveau 1 à 18), aux descriptions détaillées des compétences interactives, aux astuces de jeu (alliés/ennemis) et à la galerie complète des skins.
-*   **🛡️ Armurerie (Objets) :** Explorez tous los objets du jeu, leurs coûts (base, total, revente) et leurs statistiques détaillées.
-*   **🎲 Mode ARAM (Accéléromètre) :** Secouez physiquement votre iPhone pour déclencher un tirage au sort instantané parmi vos champions filtrés et afficher directement leur fiche technique complète.
-*   **📍 Lieux E-sport & LAN (Géolocalisation) :** Une carte interactive intégrée (`MapKit`) qui détecte votre position GPS en temps réel (`CoreLocation`), liste les bars e-sport et salles LAN à proximité, calcule la distance exacte et intègre un bouton d'itinéraire vers l'application Plans.
-*   **☁️ Cloud & Hors-Ligne (Firebase Firestore) :** Synchronisation en temps réel des données distantes et gestion du cache local pour un fonctionnement entièrement transparent même sans connexion Internet.
-*   **🎨 UI/UX Premium :** Design soigné utilisant le *Glassmorphism* (`.ultraThinMaterial`), des effets de parallaxe sur les bannières, un cache d'images sur-mesure (`CachedAsyncImage`) et des retours haptiques (vibrations).
-*   **❤️ Favoris & Filtres :** Marquez vos champions préférés et triez-les rapidement par classes (Assassin, Mage, Tank, etc.).
+Les fonctionnalités premium (créateur de builds, comparateur, quiz, défis quotidiens) et le système avancé de modération ont été **retirés du code**. L'ajout simple de lieux est conservé.
 
----
+## Architecture
 
-## 🛠️ Technologies & Architecture
+- Swift, SwiftUI et MVVM léger.
+- **Firebase Authentication** pour l'identification.
+- **Cloud Firestore** comme source des champions, objets, lieux et favoris.
+- **Cache persistant Firestore** pour les documents déjà lus lorsque le réseau disparaît.
+- Riot Data Dragon : images et détails complémentaires à la demande, avec cache disque. Le catalogue de secours Data Dragon n'est utilisé que hors ligne si Firestore ne dispose pas des données.
+- MapKit et CoreLocation pour afficher les lieux et, avec autorisation, la position.
+- Une sélection ARAM en Swift pur (`ARAMCore/ARAMState.swift`) et un récepteur UIKit du geste piloté par `Services/ARAMShakeController.swift`.
 
-*   **Langage :** Swift
-*   **Interface :** SwiftUI
-*   **Base de données & Cloud :** Firebase Firestore (avec persistance locale)
-*   **Capteurs & Matériel :** 
-    *   `CoreMotion` / `UIWindow` (Détection de secousse pour l'ARAM)
-    *   `CoreLocation` & `MapKit` (Géolocalisation et cartographie interactive)
-*   **Réseau & Asynchronisme :** `async/await` et URLSession (API Riot Games Data Dragon)
-*   **Architecture :** MVVM (Model-View-ViewModel) + "Lazy Fetching" (chargement des détails à la demande).
+**Sécurité :** les utilisateurs connectés lisent les catalogues. Seul un administrateur peut modifier les champions et les objets. Un utilisateur connecté peut **créer un lieu** dont les champs sont vérifiés par Firestore, mais seuls les administrateurs peuvent modifier ou supprimer un lieu existant. Chaque utilisateur modifie uniquement ses propres favoris.
 
----
+## Démarrer dans Xcode
 
-## 🚀 Installation & Prérequis
+1. Ouvrir `LeagueDex.xcodeproj` dans Xcode.
+2. Laisser résoudre les dépendances Firebase.
+3. Vérifier `GoogleService-Info.plist`, l'identifiant de l'app iOS et le projet Firebase.
+4. Activer **Email/Password** dans Firebase Console → Authentication → Sign-in method.
+5. Vérifier les collections `champions`, `items` et `venues` sur le projet Firestore configuré.
+6. Sélectionner le schéma **LeagueDex**, un iPhone ou simulateur et lancer avec **⌘ + R**.
+7. Pour tester l'ajout : onglet **Lieux → + → saisir une adresse → Vérifier l'adresse → Ajouter sur la carte**. Le lieu doit apparaître après validation par Firestore. **Les règles Firestore modifiées doivent être déployées manuellement sur le bon projet Firebase avant ce test réel.**
 
-1. **Prérequis :** Xcode 26.6 et SDK iOS 26.5 ou ultérieur. La cible iOS 26.5 du projet est conservée.
-2. Clonez ou téléchargez ce projet sur votre Mac.
-3. Ouvrez le projet dans Xcode et résolvez le package Firebase existant, notamment **FirebaseAuth** et **FirebaseFirestore**. Activez Email/Password dans Firebase Authentication.
-4. Configurez les autorisations de localisation dans le fichier `Info.plist` (`Privacy - Location When In Use Usage Description`).
-5. Sélectionnez un simulateur (ex: iPhone Pro avec une position GPS simulée via le menu *Debug > Location*) ou branchez votre iPhone.
-6. Lancez l'application (`Cmd + R`).
+Le **vrai shake** doit être testé sur un **iPhone physique**, pas seulement dans le simulateur.
 
-La connexion est obligatoire. Examinez [les instructions de livraison et migration](docs/PREMIUM_DELIVERY.md)
-et testez les règles Firestore avant leur déploiement manuel sur le projet existant.
-Les clients ne disposent pas du droit d'écriture sur les catalogues publics.
+## Tester
 
-Sur macOS, `bash scripts/validate-ios.sh` exécute les tests Swift et les builds
-simulateur Debug et Release. Les règles se testent séparément avec Node 22,
-Java 21, `npm ci` puis `npm run test:rules` (projet d'émulation `demo-leaguedex`).
-Les dépendances npm servent uniquement à la validation Firebase et ne sont pas
-embarquées dans l'application native.
+Sur macOS avec Xcode :
 
----
+```bash
+swift test --parallel
+bash scripts/validate-ios.sh
+```
 
-## 📂 Structure du projet
+Pour les règles Firestore (émulateur Firebase, Node.js et Java installés) :
 
-*   `App/` 
-    *   `LeagueDexApp.swift` : Point d'entrée et initialisation de Firebase (`AppDelegate`).
-*   `Components/` 
-    *   `CachedAsyncImage.swift` : Système de cache d'images local sur-mesure.
-    *   `ChampionCard.swift` & `SpellIcon.swift` : Composants graphiques réutilisables.
-*   `Models/` 
-    *   `Champion.swift` : Structures de données des champions (API Riot et Firestore).
-    *   `DBVenue.swift` : Modèle de données pour les lieux e-sport.
-    *   `Item.swift` : Structures de données de l'armurerie.
-*   `Utils/` 
-    *   `DeviceShakeViewModifier.swift` : Gestionnaire de l'accéléromètre (Mode ARAM).
-    *   `LocationManager.swift` : Gestionnaire de géolocalisation (`CoreLocation`).
-    *   `String+Extension.swift` : Nettoyage des balises HTML des descriptions.
-*   `ViewModels/` 
-    *   `ChampionViewModel.swift` & `ItemViewModel.swift` : Logique métier et synchronisation avec Firestore.
-*   `Views/` 
-    *   `Champions/` : 
-        *   `ChampionsView.swift` : Catalogue, filtres, recherche et déclencheur ARAM.
-        *   `ChampionDetailView.swift` : Fiche détaillée (stats par niveau, sorts, skins).
-    *   `Core/` : 
-        *   `MainTabView.swift` : Navigation principale par onglets.
-    *   `Items/` : 
-        *   `ItemsView.swift` : Interface de l'armurerie et détails des objets.
-    *   `VenuesMapView.swift` : Carte interactive et gestion des lieux e-sport.
+```bash
+npm ci
+npm run test:rules
+```
 
----
+Les modifications de `firestore.rules` doivent être examinées et **déployées manuellement** dans le projet Firebase approprié. Aucun script ne modifie ni n'efface la base de production.
 
-## ⚖️ Mentions légales
+Les anciens documents de builds, quiz, comparaisons ou contributions peuvent rester dans Firestore : **supprimer du code n'efface pas les données**. Les règles minimalistes de cette version n'exposent plus ces collections au client.
 
-*LeagueDex a été créé dans le cadre d'un projet universitaire (Master 2) et n'est pas approuvé par Riot Games. L'application ne reflète pas les vues ou opinions de Riot Games ou de toute personne officiellement impliquée dans la production ou la gestion de League of Legends. League of Legends et Riot Games sont des marques commerciales ou des marques déposées de Riot Games, Inc.*
+Consulter [la recette ARAM](docs/ARAM_RELIABILITY.md) avant la soutenance.
+
+## Mentions légales
+
+LeagueDex est un projet pédagogique non affilié à Riot Games. League of Legends et ses éléments appartiennent à leurs ayants droit respectifs.

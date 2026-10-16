@@ -1,90 +1,87 @@
 import SwiftUI
 import MapKit
 
-/// Collect a venue, resolve its address through Apple Maps, then publish it
-/// as a private, moderated Firestore proposal after confirming the address.
+/// A single small form: enter a place, verify its address using Apple Maps,
+/// and publish it to the shared Firestore map under the signed-in account.
 struct AddVenueView: View {
     @ObservedObject var viewModel: VenueViewModel
-    @Environment(\.dismiss) private var dismiss
+    var onAdded: (CLLocationCoordinate2D) -> Void = { _ in }
 
+    @Environment(\.dismiss) private var dismiss
     @State private var draft = VenueDraft()
-    @State private var matchedCoordinate: CLLocationCoordinate2D?
-    @State private var matchedAddress: String?
-    @State private var resolving = false
+    @State private var coordinate: CLLocationCoordinate2D?
+    @State private var verifiedAddress: String?
+    @State private var isSearching = false
     @State private var errorMessage: String?
 
     var body: some View {
         NavigationStack {
             Form {
-                Section("Le lieu") {
+                Section("Lieu e-sport") {
                     TextField("Nom de l'établissement", text: $draft.name)
                         .textContentType(.organizationName)
 
-                    Picker("Catégorie", selection: $draft.type) {
+                    Picker("Type de lieu", selection: $draft.type) {
                         Text("Bar e-sport").tag("Bar E-sport")
                         Text("Salle LAN").tag("Salle LAN")
                         Text("Autre lieu gaming").tag("Autre lieu gaming")
                     }
 
-                    TextField("Adresse complète, ville et pays", text: $draft.address, axis: .vertical)
+                    TextField("Adresse complète et ville", text: $draft.address, axis: .vertical)
                         .textContentType(.fullStreetAddress)
-                        .onChange(of: draft.address) { _ in
-                            matchedCoordinate = nil
-                            matchedAddress = nil
+                        .onChange(of: draft.address) { _, _ in
+                            coordinate = nil
+                            verifiedAddress = nil
                             errorMessage = nil
                         }
 
                     Button {
-                        Task { await resolveAddress() }
+                        Task { await verifyAddress() }
                     } label: {
                         HStack {
-                            Label("Vérifier l'adresse sur Plans", systemImage: "magnifyingglass")
+                            Label("Vérifier l'adresse", systemImage: "magnifyingglass")
                             Spacer()
-                            if resolving { ProgressView() }
+                            if isSearching { ProgressView() }
                         }
                     }
-                    .disabled(resolving || draft.address.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty)
+                    .disabled(isSearching || draft.address.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty)
                 }
 
-                if let coordinate = matchedCoordinate {
-                    Section("Position trouvée — à confirmer") {
-                        Map(initialPosition: .region(
-                            MKCoordinateRegion(
-                                center: coordinate,
-                                span: MKCoordinateSpan(latitudeDelta: 0.012, longitudeDelta: 0.012)
-                            )
-                        )) {
-                            Marker(draft.name.isEmpty ? "Nouveau lieu" : draft.name,
-                                   coordinate: coordinate)
+                if let coordinate {
+                    Section("Position à confirmer") {
+                        Map(initialPosition: .region(MKCoordinateRegion(
+                            center: coordinate,
+                            span: MKCoordinateSpan(latitudeDelta: 0.012, longitudeDelta: 0.012)
+                        ))) {
+                            Marker(draft.name.isEmpty ? "Nouveau lieu" : draft.name, coordinate: coordinate)
                         }
-                        .frame(height: 175)
+                        .frame(height: 180)
                         .listRowInsets(EdgeInsets())
-                        if let matchedAddress {
-                            Label(matchedAddress, systemImage: "mappin.and.ellipse")
+
+                        if let verifiedAddress {
+                            Label(verifiedAddress, systemImage: "mappin.and.ellipse")
                                 .font(.subheadline)
                         }
-                        Text("Vérifiez que le repère correspond bien au lieu avant de le publier.")
+                        Text("Vérifie le repère sur la carte avant l'enregistrement.")
                             .font(.footnote)
                             .foregroundStyle(.secondary)
                     }
                 }
 
-                Section("Horaires et informations") {
-                    TextField("Horaires (ex. lun–sam 14h–23h)", text: $draft.openingHours, axis: .vertical)
-                        .lineLimit(2...4)
-                    TextField("Téléphone (facultatif)", text: $draft.phone)
+                Section("Informations facultatives") {
+                    TextField("Horaires d'ouverture", text: $draft.openingHours)
+                    TextField("Téléphone", text: $draft.phone)
                         .keyboardType(.phonePad)
-                    TextField("Site web (https://...)", text: $draft.website)
+                    TextField("Site web", text: $draft.website)
                         .keyboardType(.URL)
                         .textInputAutocapitalization(.never)
                         .autocorrectionDisabled()
-                    TextField("Infos pratiques : jeux, événements, accès…",
-                              text: $draft.details, axis: .vertical)
-                        .lineLimit(2...6)
+                    TextField("Informations pratiques", text: $draft.details, axis: .vertical)
+                        .lineLimit(2...4)
                 }
 
                 Section {
-                    Text("Ta proposition sera enregistrée dans ton compte Firebase et examinée avant d’être visible sur la carte. Une proposition par jour UTC est autorisée. Les horaires et informations doivent être exacts.")
+                    Text("Le lieu sera enregistré dans Firebase et apparaîtra sur la carte pour les utilisateurs connectés. L'ajout nécessite Internet.")
                         .font(.footnote)
                         .foregroundStyle(.secondary)
                 }
@@ -92,79 +89,81 @@ struct AddVenueView: View {
                 if let errorMessage {
                     Section {
                         Label(errorMessage, systemImage: "exclamationmark.triangle")
-                            .foregroundStyle(LeagueTheme.danger)
                             .font(.subheadline)
+                            .foregroundStyle(LeagueTheme.danger)
                     }
                 }
 
                 Section {
                     Button {
-                        Task { await publish() }
+                        Task { await saveVenue() }
                     } label: {
                         HStack {
                             Spacer()
                             if viewModel.isSaving {
                                 ProgressView()
-                                Text("Envoi…")
+                                Text("Enregistrement…")
                             } else {
-                                Label("Soumettre à la modération", systemImage: "paperplane.fill")
+                                Label("Ajouter sur la carte", systemImage: "plus.circle.fill")
                             }
                             Spacer()
                         }
                     }
-                    .disabled(!draft.canSubmit || matchedCoordinate == nil || viewModel.isSaving || resolving)
+                    .disabled(!draft.canSubmit || coordinate == nil || isSearching || viewModel.isSaving)
                 }
             }
             .scrollContentBackground(.hidden)
             .background(LeagueTheme.background)
-            .navigationTitle("Proposer un lieu")
+            .navigationTitle("Ajouter un lieu")
             .navigationBarTitleDisplayMode(.inline)
             .toolbar {
                 ToolbarItem(placement: .cancellationAction) {
                     Button("Annuler") { dismiss() }
                 }
             }
-            .tint(LeagueTheme.gold)
         }
+        .tint(LeagueTheme.gold)
     }
 
     @MainActor
-    private func resolveAddress() async {
-        guard !resolving else { return }
-        resolving = true
-        errorMessage = nil
-        defer { resolving = false }
-
+    private func verifyAddress() async {
+        guard !isSearching else { return }
         let searched = draft.address.trimmingCharacters(in: .whitespacesAndNewlines)
+        guard !searched.isEmpty else { return }
+
+        isSearching = true
+        errorMessage = nil
+        coordinate = nil
+        verifiedAddress = nil
+        defer { isSearching = false }
+
         let request = MKLocalSearch.Request()
         request.naturalLanguageQuery = searched
         request.resultTypes = [.address, .pointOfInterest]
 
         do {
             let result = try await MKLocalSearch(request: request).start()
-            guard searched == draft.address.trimmingCharacters(in: .whitespacesAndNewlines) else { return }
-            guard let mapItem = result.mapItems.first else {
+            guard draft.address.trimmingCharacters(in: .whitespacesAndNewlines) == searched else { return }
+            guard let match = result.mapItems.first else {
                 throw VenueSubmissionError.addressNotFound
             }
-            matchedCoordinate = mapItem.placemark.coordinate
-            matchedAddress = mapItem.placemark.title ?? searched
+            coordinate = match.placemark.coordinate
+            verifiedAddress = match.placemark.title ?? searched
         } catch {
-            matchedCoordinate = nil
-            matchedAddress = nil
-            errorMessage = error.localizedDescription
+            errorMessage = "Adresse non vérifiée : \(error.localizedDescription)"
         }
     }
 
     @MainActor
-    private func publish() async {
-        guard let matchedCoordinate, draft.canSubmit else { return }
+    private func saveVenue() async {
+        guard let coordinate, !viewModel.isSaving else { return }
         errorMessage = nil
-
         do {
-            try await viewModel.addVenue(draft, at: matchedCoordinate)
+            try await viewModel.addVenue(draft, at: coordinate)
+            onAdded(coordinate)
             dismiss()
         } catch {
-            errorMessage = "Proposition non enregistrée : \(error.localizedDescription). Vérifie la connexion et la limite quotidienne."
+            errorMessage = "Impossible d'ajouter ce lieu : \(error.localizedDescription)"
         }
     }
 }
