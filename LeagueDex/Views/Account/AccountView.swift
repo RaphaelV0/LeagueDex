@@ -17,7 +17,7 @@ struct AccountView: View {
                                 .font(.body)
                                 .textSelection(.enabled)
                         }
-                        Text("Vos favoris et vos builds sont associés à ce compte.")
+                        Text("Vos champions favoris sont synchronisés avec votre compte Firebase.")
                             .font(.subheadline)
                             .foregroundStyle(LeagueTheme.muted)
                     }
