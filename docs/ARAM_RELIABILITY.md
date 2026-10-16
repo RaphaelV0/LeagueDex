@@ -123,3 +123,63 @@ La seconde commande requiert Xcode et un simulateur iOS compatible. Les tests de
 8. Répéter sur appareil réel avec VoiceOver, Réduire les animations, connexion lente et après verrouillage/déverrouillage.
 
 **Le simulateur ne reproduit pas forcément le geste physique réel.** Les validations Swift et CI ne garantissent pas la réception du shake sur tous les iPhone.
+
+## Correction des tirages ignorés — horloge monotone
+
+Les logs sur iPhone montrent que les événements atteignent désormais le contrôleur,
+mais que `ARAMState` les rejette après le premier tirage :
+
+```text
+[LeagueDex ARAM] UIKit shake received
+[LeagueDex ARAM] Event delivered to controller; tabActive=true, gallery=false, closing=false, champions=168
+[LeagueDex ARAM] Selection skipped (duplicate, debounce or empty catalog)
+```
+
+Le moteur comparait `UIEvent.timestamp` à la valeur du dernier shake.
+UIKit peut fournir des horodatages répétés, décalés ou anciens dans les callbacks
+de mouvement. Le timestamp de sélection est maintenant pris à la **réception**
+(`ProcessInfo.processInfo.systemUptime`), toujours sur une horloge monotone
+cohérente. Un retour en arrière de l'horloge n'empêche plus les shakes suivants.
+
+Les logs Debug précisent aussi les rejets : événement déjà vu, délai
+anti-double notification, horodatage invalide. La limite reste 0,45 seconde ;
+un geste distinct après une seconde doit déclencher un nouveau tirage.
+
+### Priorité des données : Firebase en ligne, cache seulement hors ligne
+
+- `ChampionViewModel` lit en direct `Firestore/champions` ; `ItemViewModel`
+  lit `Firestore/items`. Les changements serveur se propagent par leurs
+  listeners Firestore.
+- Les snapshots Firestore issus du cache restent utilisables durant la
+  synchronisation ; une réponse **confirmée du serveur** devient prioritaire.
+- **En ligne**, une collection confirmée vide affiche une erreur Firebase :
+  elle ne déclenche plus un téléchargement Data Dragon en remplacement.
+- **Hors ligne**, si les documents Firestore ne sont pas disponibles, un
+  catalogue Data Dragon **précédemment téléchargé et validé** peut servir de
+  repli sur disque, sans écriture dans Firestore. Le moniteur réseau active
+  ce repli même si la perte de connexion survient après l'ouverture de l'écran.
+- Les favoris, builds, scores et autres données privées continuent à être
+  associés au compte Firebase ; la synchronisation Firestore est indépendante
+  du cache local.
+- Les détails ou images non renseignés dans Firebase peuvent nécessiter un
+  chargement Riot Data Dragon à la demande ; ils ne donnent jamais au client
+  le droit d'écrire dans les collections publiques protégées par les règles.
+  Leur mise à jour centrale doit être réalisée par un backend administrateur.
+
+### Test de réception et de cache
+
+1. Sur iPhone connecté, ouvrir Champions et faire trois shakes espacés
+   d'une seconde ; le compteur de révision doit afficher 1, 2 puis 3.
+2. Dans les logs Debug, vérifier les valeurs `uptime=` et
+   `eventTimestamp=`. Chaque appel émet une réception ; une notification
+   doublon doit indiquer explicitement sa raison d'ignorance.
+3. Modifier un document `champions` (ou `items`) dans un environnement
+   **Firebase de test** autorisé ; vérifier l'actualisation du catalogue.
+4. Charger les listes et quelques détails puis passer en mode avion :
+   vérifier la consultation du cache, sans écriture de remplacement.
+5. Rétablir la connexion : la donnée Firestore du serveur doit remplacer la
+   version du cache ; si la collection du serveur est réellement vide,
+   afficher une erreur plutôt qu'inventer des données locales.
+6. Ne pas supprimer ni remplacer les données du projet Firebase de production
+   pour ce test.
+
