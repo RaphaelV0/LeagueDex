@@ -133,7 +133,8 @@ struct ChampionsView: View {
             }
             .navigationDestination(for: String.self) { championID in
                 if let champion = viewModel.champions.first(where: { $0.id == championID }) {
-                    ChampionDetailView(champion: champion, viewModel: viewModel) { presented in
+                    ChampionDetailView(champion: champion, viewModel: viewModel,
+                                       enableShakeDetection: true) { presented in
                         updateGallery(presented)
                     }
                 } else {
@@ -141,6 +142,11 @@ struct ChampionsView: View {
                                            systemImage: "person.crop.circle.badge.questionmark")
                 }
             }
+        }
+        // A visible UIKit responder receives motionEnded reliably while the
+        // catalog is active, instead of relying on UIWindow to be the responder.
+        .background {
+            ShakeEventReceiver(enabled: isActive && scenePhase == .active)
         }
         // Keep this listener for shakes on the catalog or a manually opened
         // champion. The full-screen screen also listens, because SwiftUI can
@@ -241,6 +247,9 @@ struct ChampionsView: View {
         )
         guard result.isAccepted else { return }
 
+        #if DEBUG
+        print("[LeagueDex ARAM] Champion tiré: \(aram.currentChampionID ?? "aucun"), révision \(aram.revision)")
+        #endif
         UIImpactFeedbackGenerator(style: .medium).impactOccurred()
         if !showingARAM { showingARAM = true }
     }
@@ -291,6 +300,11 @@ private struct ARAMChampionPresentation: View {
         }
         .tint(LeagueTheme.gold)
         .background(LeagueTheme.background)
+        // This receiver remains mounted in the full-screen presentation even
+        // when the champion detail is recreated for a reroll.
+        .background {
+            ShakeEventReceiver(enabled: true, reactivation: state.revision)
+        }
         // The listener inside the cover makes rerolls reliable on the champion
         // page. The selector discards a duplicate notification automatically.
         .onReceive(NotificationCenter.default.publisher(for: UIDevice.deviceDidShakeNotification)) { notification in
