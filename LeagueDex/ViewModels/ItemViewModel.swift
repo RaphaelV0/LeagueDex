@@ -82,6 +82,7 @@ class ItemViewModel: ObservableObject {
                 fallbackTask?.cancel()
                 fallbackTask = nil
                 fallbackGeneration = UUID()
+                hasLoadedFallback = false
                 items = []
                 isFromCache = false
                 isLoading = false
