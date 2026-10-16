@@ -55,14 +55,28 @@ class ItemViewModel: ObservableObject {
     private func receiveSnapshot(_ snapshot: QuerySnapshot?, error: Error?) {
         guard error == nil, let snapshot else {
             errorMessage = "Impossible de charger les objets. Vérifiez votre connexion."
-            if items.isEmpty { loadRiotFallback(cachedOnly: true) }
-            else { isLoading = false }
+            if items.isEmpty && !ConnectivityStore.shared.isOnline {
+                loadRiotFallback(cachedOnly: true)
+            } else {
+                isLoading = false
+            }
             return
         }
         if snapshot.documents.isEmpty {
-            let cachedOnly = snapshot.metadata.isFromCache || snapshot.metadata.hasPendingWrites
-            if cachedOnly && !items.isEmpty { isLoading = false }
-            else { loadRiotFallback(cachedOnly: cachedOnly) }
+            // Firestore is the source of truth while online. An initial empty
+            // cache snapshot is not proof that the server catalog is empty.
+            if snapshot.metadata.isFromCache {
+                if items.isEmpty && !ConnectivityStore.shared.isOnline {
+                    loadRiotFallback(cachedOnly: true)
+                } else {
+                    isLoading = items.isEmpty && ConnectivityStore.shared.isOnline
+                }
+            } else {
+                isLoading = false
+                if items.isEmpty {
+                    errorMessage = "Aucun objet disponible dans Firebase. Vérifiez la collection items."
+                }
+            }
             return
         }
 
@@ -81,6 +95,11 @@ class ItemViewModel: ObservableObject {
 
     /// An in-memory fallback never writes to the administrator-owned catalog.
     private func loadRiotFallback(cachedOnly: Bool) {
+        // Disk-only fallback is available exclusively without a network path.
+        guard !ConnectivityStore.shared.isOnline, cachedOnly else {
+            isLoading = false
+            return
+        }
         if hasLoadedFallback && (cachedOnly || fallbackAllowsNetwork) { isLoading = false; return }
         if fallbackTask != nil {
             guard !cachedOnly, !fallbackAllowsNetwork else { return }
