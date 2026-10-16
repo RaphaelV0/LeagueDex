@@ -33,12 +33,19 @@ class ChampionViewModel: ObservableObject {
     
     private let db = Firestore.firestore()
     private var listenerRegistration: ListenerRegistration?
+    private var connectivitySubscription: AnyCancellable?
     
     init() {
         favoritesSubscription = FavoritesStore.shared.$ids.sink { [weak self] ids in
             guard let self else { return }
             for index in self.champions.indices {
                 self.champions[index].isFavorite = ids.contains(self.champions[index].id)
+            }
+        }
+        connectivitySubscription = ConnectivityStore.shared.$isOnline.removeDuplicates().sink { [weak self] online in
+            guard let self else { return }
+            if !online && self.champions.isEmpty {
+                self.loadRiotFallback(cachedOnly: true)
             }
         }
         fetchChampionsFromFirebase()
@@ -73,25 +80,47 @@ class ChampionViewModel: ObservableObject {
         if let error {
             print("Erreur Firestore: \(error.localizedDescription)")
             errorMessage = "Impossible de charger les champions. Vérifiez votre connexion."
-            if champions.isEmpty { loadRiotFallback(cachedOnly: true) }
-            else { isLoading = false }
+            if champions.isEmpty && !ConnectivityStore.shared.isOnline {
+                loadRiotFallback(cachedOnly: true)
+            } else {
+                isLoading = false
+            }
             return
         }
 
         guard let snapshot else {
             errorMessage = "Aucune réponse de la base de données."
-            if champions.isEmpty { loadRiotFallback(cachedOnly: true) }
-            else { isLoading = false }
+            if champions.isEmpty && !ConnectivityStore.shared.isOnline {
+                loadRiotFallback(cachedOnly: true)
+            } else {
+                isLoading = false
+            }
             return
         }
 
         let documents = snapshot.documents
         if documents.isEmpty {
-            // An empty local query must never erase a valid in-memory fallback.
-            // Only a server-confirmed empty catalog permits a new Riot download.
-            let cachedOnly = snapshot.metadata.isFromCache || snapshot.metadata.hasPendingWrites
-            if cachedOnly && !champions.isEmpty { isLoading = false }
-            else { loadRiotFallback(cachedOnly: cachedOnly) }
+            // Firestore is authoritative while online: a temporarily empty
+            // local snapshot must not be mistaken for an empty server catalog.
+            // Never replace an empty online Firestore result with Data Dragon.
+            if snapshot.metadata.isFromCache {
+                if champions.isEmpty && !ConnectivityStore.shared.isOnline {
+                    loadRiotFallback(cachedOnly: true)
+                } else {
+                    isLoading = champions.isEmpty && ConnectivityStore.shared.isOnline
+                }
+            } else {
+                // Server-confirmed absence overrides any temporary offline Riot
+                // catalog; never continue showing a local-only copy as Firebase.
+                fallbackTask?.cancel()
+                fallbackTask = nil
+                fallbackGeneration = UUID()
+                hasLoadedFallback = false
+                champions = []
+                isFromCache = false
+                isLoading = false
+                errorMessage = "Aucun champion disponible dans Firebase. Vérifiez la collection champions."
+            }
             return
         }
 
@@ -143,8 +172,14 @@ class ChampionViewModel: ObservableObject {
 
     }
 
-    // 2. Secours Data Dragon en mémoire uniquement. Le catalogue public est administré côté serveur.
+    // 2. Offline fallback only. While connected, Firestore is the sole source of
+    // champion catalog records and no client may overwrite the shared collection.
     private func loadRiotFallback(cachedOnly: Bool) {
+        // No Data Dragon replacement while Firestore is reachable.
+        guard !ConnectivityStore.shared.isOnline, cachedOnly else {
+            isLoading = false
+            return
+        }
         if hasLoadedFallback && (cachedOnly || fallbackAllowsNetwork) { isLoading = false; return }
         if fallbackTask != nil {
             guard !cachedOnly, !fallbackAllowsNetwork else { return }
