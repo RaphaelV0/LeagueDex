@@ -11,6 +11,32 @@ service cloud.firestore {
       return connected() && request.auth.token.get('admin', false) == true;
     }
 
+    // A connected user may add a public venue, but cannot alter another
+    // venue afterwards. Validate all submitted fields on the server.
+    function validNewVenue(data) {
+      return data.keys().hasAll([
+          'name', 'address', 'latitude', 'longitude',
+          'type', 'authorUID', 'createdAt'
+        ])
+        && data.keys().hasOnly([
+          'name', 'address', 'latitude', 'longitude', 'type',
+          'openingHours', 'phone', 'website', 'details',
+          'authorUID', 'createdAt'
+        ])
+        && data.authorUID == request.auth.uid
+        && data.createdAt == request.time
+        && data.name is string && data.name.size() > 0 && data.name.size() <= 120
+        && data.address is string && data.address.size() > 0 && data.address.size() <= 250
+        && data.latitude is number && data.latitude >= -90 && data.latitude <= 90
+        && data.longitude is number && data.longitude >= -180 && data.longitude <= 180
+        && data.type in ['Bar E-sport', 'Salle LAN', 'Autre lieu gaming']
+        && data.get('openingHours', '') is string
+        && data.get('openingHours', '').size() <= 500
+        && data.get('phone', '') is string && data.get('phone', '').size() <= 60
+        && data.get('website', '') is string && data.get('website', '').size() <= 300
+        && data.get('details', '') is string && data.get('details', '').size() <= 1500;
+    }
+
     // Each account can read and update only its own champion favorites.
     // Tombstones preserve explicit deselections through legacy migrations.
     match /users/{uid}/favorites/{championID} {
@@ -25,7 +51,7 @@ service cloud.firestore {
       allow delete: if false;
     }
 
-    // Read-only catalogs for app users. Admins populate these outside the app.
+    // Champions and items remain read-only for app users; venues accept only validated new entries.
     match /champions/{id} {
       allow read: if connected();
       allow write: if admin();
@@ -36,7 +62,8 @@ service cloud.firestore {
     }
     match /venues/{id} {
       allow read: if connected();
-      allow write: if admin();
+      allow create: if admin() || (connected() && validNewVenue(request.resource.data));
+      allow update, delete: if admin();
     }
 
     // No access is granted to retired premium collections. Existing documents
