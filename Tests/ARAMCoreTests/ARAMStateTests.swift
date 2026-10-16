@@ -65,6 +65,28 @@ struct ARAMStateTests {
         #expect(state.revision == 2)
     }
 
+    @Test("Clock regression never blocks all future shakes")
+    func clockRegression() {
+        var state = ARAMState()
+        // A stale event timestamp after a valid shake used to produce a
+        // permanently negative elapsed interval, ignoring every later draw.
+        #expect(shake(&state, at: 120) == .opened)
+        #expect(shake(&state, at: 1) == .replaced)
+        #expect(shake(&state, at: 1.1) == .ignored)
+        #expect(shake(&state, at: 1.7) == .replaced)
+        #expect(state.revision == 3)
+    }
+
+    @Test("Debounce does not swallow subsequent shakes a second apart")
+    func separatedShakes() {
+        var state = ARAMState()
+        for index in 0..<8 {
+            let result = shake(&state, at: Double(index) + 0.5)
+            #expect(result == (index == 0 ? .opened : .replaced))
+            #expect(state.revision == index + 1)
+        }
+    }
+
     @Test("An empty catalog does not consume a shake")
     func emptyCatalog() {
         var state = ARAMState()
