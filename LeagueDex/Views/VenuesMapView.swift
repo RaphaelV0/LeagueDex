@@ -8,6 +8,7 @@ struct VenuesMapView: View {
     @StateObject private var locationManager = LocationManager()
     @State private var searchText = ""
     @State private var selectedVenue: DBVenue?
+    @State private var showingAddVenue = false
     @State private var focusWhenLocated = false
     @State private var cameraPosition: MapCameraPosition = .region(
         MKCoordinateRegion(
@@ -68,6 +69,15 @@ struct VenuesMapView: View {
             .navigationTitle("Lieux e-sport")
             .searchable(text: $searchText, prompt: "Rechercher un lieu ou une ville")
             .toolbar {
+                ToolbarItem(placement: .topBarLeading) {
+                    Button {
+                        showingAddVenue = true
+                    } label: {
+                        Image(systemName: "plus.circle.fill")
+                    }
+                    .accessibilityLabel("Ajouter un lieu sur la carte")
+                }
+
                 ToolbarItem(placement: .topBarTrailing) {
                     Button {
                         if let coordinate = locationManager.userLocation {
@@ -84,6 +94,12 @@ struct VenuesMapView: View {
             }
             .sheet(item: $selectedVenue) { venue in
                 VenueDetailView(venue: venue, userCoordinate: locationManager.userLocation)
+            }
+            .sheet(isPresented: $showingAddVenue) {
+                AddVenueView(viewModel: viewModel) { coordinate in
+                    searchText = ""
+                    focus(on: coordinate)
+                }
             }
             .onChange(of: locationManager.userLocation?.latitude) { _, _ in
                 guard focusWhenLocated, let coordinate = locationManager.userLocation else { return }
