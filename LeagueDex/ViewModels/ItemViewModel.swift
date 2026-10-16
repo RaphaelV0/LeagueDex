@@ -24,8 +24,15 @@ class ItemViewModel: ObservableObject {
     
     private let db = Firestore.firestore()
     private var listenerRegistration: ListenerRegistration?
+    private var connectivitySubscription: AnyCancellable?
     
     init() {
+        connectivitySubscription = ConnectivityStore.shared.$isOnline.removeDuplicates().sink { [weak self] online in
+            guard let self else { return }
+            if !online && self.items.isEmpty {
+                self.loadRiotFallback(cachedOnly: true)
+            }
+        }
         fetchItemsFromFirebase()
     }
     
@@ -72,10 +79,13 @@ class ItemViewModel: ObservableObject {
                     isLoading = items.isEmpty && ConnectivityStore.shared.isOnline
                 }
             } else {
+                fallbackTask?.cancel()
+                fallbackTask = nil
+                fallbackGeneration = UUID()
+                items = []
+                isFromCache = false
                 isLoading = false
-                if items.isEmpty {
-                    errorMessage = "Aucun objet disponible dans Firebase. Vérifiez la collection items."
-                }
+                errorMessage = "Aucun objet disponible dans Firebase. Vérifiez la collection items."
             }
             return
         }
