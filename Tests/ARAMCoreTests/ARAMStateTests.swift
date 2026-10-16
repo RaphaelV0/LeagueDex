@@ -2,7 +2,7 @@ import Foundation
 import Testing
 @testable import ARAMCore
 
-@Suite("ARAM event and presentation state")
+@Suite("ARAM shake-only champion selection")
 struct ARAMStateTests {
     private let champions = ["Ahri", "Aatrox", "Ashe"]
 
@@ -11,273 +11,111 @@ struct ARAMStateTests {
         _ state: inout ARAMState,
         at time: TimeInterval,
         id: UUID = UUID(),
-        active: Bool = true,
-        foreground: Bool = true,
         candidates: [String]? = nil,
-        currentID: String? = nil
+        selectIndex: @escaping (Int) -> Int = { _ in 0 }
     ) -> ARAMState.ShakeResult {
         state.receiveShake(
             eventID: id,
             timestamp: time,
-            isActive: active,
-            sceneIsActive: foreground,
             candidateIDs: candidates ?? champions,
-            currentChampionID: currentID,
-            selectIndex: { _ in 0 }
+            selectIndex: selectIndex
         )
     }
 
-    @Test("20 distinct gestures replace one stable session")
-    func twentyGestures() throws {
+    @Test("A first shake opens ARAM and the next shake replaces the champion")
+    func firstAndNext() {
         var state = ARAMState()
         #expect(shake(&state, at: 0) == .opened)
-        let identity = try #require(state.session?.id)
-        state.presentationDidAppear(sessionID: identity)
-
-        for index in 1..<20 {
-            let previous = state.session?.championID
-            #expect(shake(&state, at: Double(index) * 0.35) == .replaced)
-            #expect(state.session?.id == identity)
-            #expect(state.session?.championID != previous)
-            #expect(state.session?.revision == index + 1)
-            #expect(state.phase == .presented)
-        }
-        #expect(state.pendingChampionID == nil)
+        #expect(state.currentChampionID == "Ahri")
+        #expect(shake(&state, at: 0.7) == .replaced)
+        #expect(state.currentChampionID == "Aatrox")
+        #expect(state.revision == 2)
     }
 
-    @Test("The same physical event draws only once")
+    @Test("Twenty distinct shakes always leave only the last champion")
+    func twentyShakes() {
+        var state = ARAMState()
+        for index in 0..<20 {
+            let previous = state.currentChampionID
+            let result = shake(&state, at: Double(index))
+            #expect(result == (index == 0 ? .opened : .replaced))
+            if previous != nil {
+                #expect(state.currentChampionID != previous)
+            }
+            #expect(state.revision == index + 1)
+        }
+        #expect(state.currentChampionID != nil)
+    }
+
+    @Test("One physical event cannot produce two draws")
     func duplicateEvent() {
         var state = ARAMState()
-        let eventID = UUID()
-        #expect(shake(&state, at: 0, id: eventID) == .opened)
-        let selection = state.session
-        #expect(shake(&state, at: 1, id: eventID) == .ignored)
-        #expect(state.session == selection)
+        let event = UUID()
+        #expect(shake(&state, at: 0, id: event) == .opened)
+        #expect(shake(&state, at: 1, id: event) == .ignored)
+        #expect(state.revision == 1)
     }
 
-    @Test("Repeated notifications are suppressed without swallowing spaced gestures")
-    func shortDebounce() {
+    @Test("A quick duplicate notification is ignored, but a later shake works")
+    func debounce() {
         var state = ARAMState()
-        shake(&state, at: 0)
-        let repeatedID = UUID()
-        #expect(shake(&state, at: 0.1, id: repeatedID) == .ignored)
-        #expect(shake(&state, at: 0.35) == .replaced)
-        #expect(shake(&state, at: 1, id: repeatedID) == .ignored)
-        #expect(state.session?.revision == 2)
+        #expect(shake(&state, at: 10) == .opened)
+        #expect(shake(&state, at: 10.10) == .ignored)
+        #expect(shake(&state, at: 10.60) == .replaced)
+        #expect(state.revision == 2)
     }
 
-    @Test("A shake during opening changes the same presentation")
-    func opening() throws {
-        var state = ARAMState()
-        shake(&state, at: 0)
-        let identity = try #require(state.session?.id)
-        #expect(shake(&state, at: 0.35) == .replaced)
-        #expect(state.session?.id == identity)
-        #expect(state.phase == .opening)
-        state.presentationDidAppear(sessionID: identity)
-        #expect(state.phase == .presented)
-    }
-
-    @Test("Closing is immediate, and gestures during dismissal retain the latest choice")
-    func closing() throws {
-        var state = ARAMState()
-        shake(&state, at: 0)
-        let oldID = try #require(state.session?.id)
-        state.presentationDidAppear(sessionID: oldID)
-        state.close(sessionID: oldID)
-        #expect(state.phase == .closing)
-        #expect(shake(&state, at: 0.35) == .deferred)
-        #expect(shake(&state, at: 0.7) == .deferred)
-        let latest = state.pendingChampionID
-        #expect(state.session?.id == oldID)
-        state.presentationDidDismiss(sessionID: oldID, isActive: true, sceneIsActive: true)
-        #expect(state.phase == .opening)
-        #expect(state.session?.id != oldID)
-        #expect(state.session?.championID == latest)
-        #expect(state.session?.revision == 3)
-
-        // A late dismissal from the previous cover cannot dismiss its successor.
-        let reopened = state.session
-        state.presentationDidDismiss(sessionID: oldID, isActive: true, sceneIsActive: true)
-        state.close(sessionID: oldID)
-        state.presentationDidAppear(sessionID: oldID)
-        #expect(state.session == reopened)
-        #expect(state.phase == .opening)
-    }
-
-    @Test("Closing without another gesture returns to idle")
-    func closeWithoutShake() throws {
-        var state = ARAMState()
-        shake(&state, at: 0)
-        let identity = try #require(state.session?.id)
-        state.close(sessionID: identity)
-        state.presentationDidDismiss(sessionID: identity, isActive: true, sceneIsActive: true)
-        #expect(state.session == nil)
-        #expect(state.phase == .idle)
-    }
-
-    @Test("A gallery retains its displayed champion and applies the latest draw on dismissal")
-    func galleryDefersDraws() throws {
-        var state = ARAMState()
-        shake(&state, at: 0)
-        let initial = try #require(state.session)
-        state.presentationDidAppear(sessionID: initial.id)
-        state.setGalleryPresented(true, sessionID: initial.id)
-        #expect(shake(&state, at: 0.35) == .deferred)
-        #expect(shake(&state, at: 0.7) == .deferred)
-        let latest = state.pendingChampionID
-        #expect(state.session?.championID == initial.championID)
-        #expect(state.session?.revision == 1)
-        state.setGalleryPresented(false, sessionID: initial.id)
-        #expect(state.session?.championID == latest)
-        #expect(state.session?.id == initial.id)
-        #expect(state.session?.revision == 3)
-        #expect(state.pendingChampionID == nil)
-    }
-
-    @Test("A gallery in a manual detail cannot open ARAM underneath another modal")
-    func manualGallery() {
-        var state = ARAMState()
-        state.setGalleryPresented(true)
-        #expect(shake(&state, at: 0, currentID: "Ahri") == .deferred)
-        #expect(state.session == nil)
-        #expect(state.phase == .idle)
-        state.setGalleryPresented(false)
-        #expect(state.phase == .opening)
-        #expect(state.session?.championID == "Aatrox")
-    }
-
-    @Test("Inactive tabs and background scenes never select a champion")
-    func inactiveContext() {
-        var state = ARAMState()
-        #expect(shake(&state, at: 0, active: false) == .ignored)
-        #expect(shake(&state, at: 1, foreground: false) == .ignored)
-        #expect(state.phase == .idle)
-        #expect(state.session == nil)
-        #expect(shake(&state, at: 1.1) == .opened)
-    }
-
-    @Test("Deferred draws cannot reopen a session in another tab or the background")
-    func discardDeferredInInactiveContext() throws {
-        for background in [true, false] {
-            var state = ARAMState()
-            shake(&state, at: 0)
-            let identity = try #require(state.session?.id)
-            state.close(sessionID: identity)
-            shake(&state, at: 0.35)
-            state.presentationDidDismiss(
-                sessionID: identity,
-                isActive: background,
-                sceneIsActive: !background
-            )
-            #expect(state.session == nil)
-            #expect(state.pendingChampionID == nil)
-            #expect(state.phase == .idle)
-        }
-    }
-
-    @Test("A deferred manual-gallery draw is discarded after switching tabs")
-    func inactiveManualGallery() {
-        var state = ARAMState()
-        state.setGalleryPresented(true)
-        shake(&state, at: 0)
-        state.setGalleryPresented(false, isActive: false)
-        #expect(state.session == nil)
-        #expect(state.pendingChampionID == nil)
-    }
-
-    @Test("Empty catalogs do not start a cooldown or presentation")
+    @Test("An empty catalog does not consume a shake")
     func emptyCatalog() {
         var state = ARAMState()
         #expect(shake(&state, at: 0, candidates: []) == .ignored)
-        #expect(state.session == nil)
-        #expect(shake(&state, at: 0.05) == .opened)
+        #expect(shake(&state, at: 0.1) == .opened)
     }
 
-    @Test("A singleton still supports repeated shakes")
+    @Test("One available champion still supports rerolls")
     func singleton() {
         var state = ARAMState()
-        #expect(shake(&state, at: 0, candidates: ["Ahri"], currentID: "Ahri") == .opened)
-        #expect(shake(&state, at: 0.35, candidates: ["Ahri"]) == .replaced)
-        #expect(state.session?.championID == "Ahri")
-        #expect(state.session?.revision == 2)
+        #expect(shake(&state, at: 0, candidates: ["Ahri"]) == .opened)
+        #expect(shake(&state, at: 1, candidates: ["Ahri"]) == .replaced)
+        #expect(state.currentChampionID == "Ahri")
+        #expect(state.revision == 2)
     }
 
-    @Test("Each accepted gesture invokes the selector exactly once")
-    func oneDrawPerGesture() {
+    @Test("Duplicate and empty champion IDs do not bias the draw")
+    func duplicateCandidates() {
         var state = ARAMState()
-        var draws = 0
-        let eventID = UUID()
-        for (time, id) in [(0.0, eventID), (0.35, eventID), (0.4, UUID())] {
-            state.receiveShake(
-                eventID: id, timestamp: time, isActive: true, sceneIsActive: true,
-                candidateIDs: champions
-            ) { _ in
-                draws += 1
-                return 0
-            }
-        }
-        #expect(draws == 2)
-        #expect(state.session?.revision == 2)
+        var numberOfCandidates = 0
+        #expect(shake(&state, at: 0,
+            candidates: ["", "Ahri", "Ahri", "Lux", "Lux"],
+            selectIndex: { count in numberOfCandidates = count; return 1 }
+        ) == .opened)
+        #expect(numberOfCandidates == 2)
+        #expect(state.currentChampionID == "Lux")
+        #expect(shake(&state, at: 1,
+            candidates: ["Ahri", "Ahri", "Lux"],
+            selectIndex: { count in numberOfCandidates = count; return 0 }
+        ) == .replaced)
+        #expect(numberOfCandidates == 1)
+        #expect(state.currentChampionID == "Ahri")
     }
 
-    @Test("Closing cancels a pending gallery draw until another gesture arrives")
-    func explicitCloseOverridesPendingDraw() throws {
-        var state = ARAMState()
-        shake(&state, at: 0)
-        let identity = try #require(state.session?.id)
-        state.setGalleryPresented(true, sessionID: identity)
-        shake(&state, at: 0.35)
-        #expect(state.pendingChampionID != nil)
-        state.close(sessionID: identity)
-        #expect(state.pendingChampionID == nil)
-        state.presentationDidDismiss(sessionID: identity, isActive: true, sceneIsActive: true)
-        #expect(state.phase == .idle)
-        #expect(state.session == nil)
-    }
-
-    @Test("Selection uses unique valid IDs and avoids the current champion when possible")
-    func selectionCandidates() {
-        var state = ARAMState()
-        var selectableCount = 0
-        let result = state.receiveShake(
-            eventID: UUID(), timestamp: 0, isActive: true, sceneIsActive: true,
-            candidateIDs: ["", "Ahri", "Ahri", "Aatrox", "Ashe"],
-            currentChampionID: "Ahri"
-        ) { count in
-            selectableCount = count
-            return count - 1
-        }
-        #expect(result == .opened)
-        #expect(selectableCount == 2)
-        #expect(state.session?.championID == "Ashe")
-    }
-
-    @Test("Late gallery callbacks from a closed session cannot mutate its successor")
-    func staleGalleryCallbacks() throws {
-        var state = ARAMState()
-        shake(&state, at: 0)
-        let oldID = try #require(state.session?.id)
-        state.close(sessionID: oldID)
-        shake(&state, at: 0.35)
-        state.presentationDidDismiss(sessionID: oldID, isActive: true, sceneIsActive: true)
-        let current = state.session
-        state.setGalleryPresented(true, sessionID: oldID)
-        state.setGalleryPresented(false, sessionID: oldID)
-        #expect(!state.isGalleryPresented)
-        #expect(state.session == current)
-    }
-
-    @Test("Invalid time and selector input cannot corrupt presentation state")
-    func invalidInput() {
+    @Test("An invalid selector or timestamp does not change the screen")
+    func invalidInputs() {
         var state = ARAMState()
         #expect(shake(&state, at: .nan) == .ignored)
-        let result = state.receiveShake(
-            eventID: UUID(), timestamp: 0, isActive: true, sceneIsActive: true,
-            candidateIDs: champions, selectIndex: { _ in -1 }
-        )
-        #expect(result == .ignored)
-        #expect(state.session == nil)
+        #expect(shake(&state, at: 0, selectIndex: { _ in -1 }) == .ignored)
+        #expect(state.currentChampionID == nil)
         #expect(shake(&state, at: 0) == .opened)
+    }
+
+    @Test("Closing clears the champion and allows a new first shake")
+    func closeAndReopen() {
+        var state = ARAMState()
+        #expect(shake(&state, at: 0) == .opened)
+        state.reset()
+        #expect(state.currentChampionID == nil)
+        #expect(state.revision == 0)
+        #expect(shake(&state, at: 1) == .opened)
+        #expect(state.revision == 1)
     }
 }
