@@ -3,7 +3,8 @@
 Cette version Master 2 vérifie uniquement les besoins de l'application :
 
 - authentification obligatoire pour lire les catalogues de champions, objets et lieux ;
-- écriture de ces catalogues réservée aux administrateurs ;
+- écriture des champions et objets réservée aux administrateurs ;
+- création de lieux `venues` autorisée aux comptes connectés si nom, adresse, type, coordonnées, auteur et horodatage serveur sont valides ; modification et suppression des lieux réservées aux administrateurs ;
 - favoris privés, modifiables par leur propriétaire uniquement ;
 - refus de lecture/écriture des chemins retirés (builds, quiz, comparaisons, propositions de lieux).
 
