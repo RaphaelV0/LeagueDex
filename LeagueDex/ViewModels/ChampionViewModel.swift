@@ -33,12 +33,19 @@ class ChampionViewModel: ObservableObject {
     
     private let db = Firestore.firestore()
     private var listenerRegistration: ListenerRegistration?
+    private var connectivitySubscription: AnyCancellable?
     
     init() {
         favoritesSubscription = FavoritesStore.shared.$ids.sink { [weak self] ids in
             guard let self else { return }
             for index in self.champions.indices {
                 self.champions[index].isFavorite = ids.contains(self.champions[index].id)
+            }
+        }
+        connectivitySubscription = ConnectivityStore.shared.$isOnline.removeDuplicates().sink { [weak self] online in
+            guard let self else { return }
+            if !online && self.champions.isEmpty {
+                self.loadRiotFallback(cachedOnly: true)
             }
         }
         fetchChampionsFromFirebase()
@@ -103,10 +110,15 @@ class ChampionViewModel: ObservableObject {
                     isLoading = champions.isEmpty && ConnectivityStore.shared.isOnline
                 }
             } else {
+                // Server-confirmed absence overrides any temporary offline Riot
+                // catalog; never continue showing a local-only copy as Firebase.
+                fallbackTask?.cancel()
+                fallbackTask = nil
+                fallbackGeneration = UUID()
+                champions = []
+                isFromCache = false
                 isLoading = false
-                if champions.isEmpty {
-                    errorMessage = "Aucun champion disponible dans Firebase. Vérifiez la collection champions."
-                }
+                errorMessage = "Aucun champion disponible dans Firebase. Vérifiez la collection champions."
             }
             return
         }
