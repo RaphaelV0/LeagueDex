@@ -115,6 +115,7 @@ class ChampionViewModel: ObservableObject {
                 fallbackTask?.cancel()
                 fallbackTask = nil
                 fallbackGeneration = UUID()
+                hasLoadedFallback = false
                 champions = []
                 isFromCache = false
                 isLoading = false
