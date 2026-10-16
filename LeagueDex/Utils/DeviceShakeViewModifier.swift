@@ -2,7 +2,7 @@ import SwiftUI
 import UIKit
 
 /// The selected champion is chosen only from completed, physical UIKit shakes.
-struct DeviceShakeEvent: Equatable {
+struct DeviceShakeEvent: Equatable, Sendable {
     let id: UUID
     let timestamp: TimeInterval
 }

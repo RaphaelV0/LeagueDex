@@ -1,5 +1,44 @@
 # ARAM — mode shake simplifié
 
+## Correctif — UIKit détecte le shake mais le champion ne change pas
+
+Le problème signalé sur iPhone n'était plus un manque de réception du mouvement :
+`[LeagueDex ARAM] UIKit shake received` s'affichait à chaque secousse,
+sans nouveau champion à l'écran.
+
+L'abonnement `SwiftUI.onReceive` du catalogue ou de la présentation pouvait
+cesser de traiter les notifications durant `fullScreenCover`. La sélection
+est désormais centralisée dans **`ARAMShakeController`** (`@StateObject`
+à la racine de Champions) avec **un seul abonnement Combine conservé** tout
+le temps où l'onglet existe.
+
+Le contrôleur reçoit `UIDevice.deviceDidShakeNotification` sans dépendre du
+cycle de vie d'une vue SwiftUI, utilise le noyau `ARAMState` existant pour
+éviter les doublons, puis publie `currentChampionID` et `revision`.
+La vue ARAM (`@ObservedObject`) est mise à jour directement quand ces
+propriétés changent. Le `fullScreenCover` est présenté une seule fois.
+
+### Diagnostic sur un vrai iPhone (Xcode Debug)
+
+Lors d'un shake accepté, les trois messages suivants doivent apparaître,
+dans cet ordre :
+
+```text
+[LeagueDex ARAM] UIKit shake received
+[LeagueDex ARAM] Event delivered to controller; tabActive=true, gallery=false, closing=false, champions=...
+[LeagueDex ARAM] Champion tiré: ..., révision 1
+```
+
+Les shakes suivants doivent conduire à `révision 2`, `révision 3`, etc.
+Si seul le premier log apparaît, la notification n'atteint pas le contrôleur.
+Si le deuxième apparaît mais pas le troisième, la ligne explique si l'onglet
+n'est pas actif, si la galerie est ouverte, si une fermeture est en cours,
+ou si le tirage a été ignoré. Lors du test, espacer deux shakes d'au moins
+0,5 seconde.
+
+Aucun bouton de relance n'a été ajouté. Le cache et les autres
+fonctionnalités ne sont pas modifiés.
+
 ## Comportement demandé
 
 - Dans **Champions**, secouer l'iPhone ouvre immédiatement la fiche d'un champion choisi au hasard dans **tout** le catalogue chargé.

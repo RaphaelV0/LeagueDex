@@ -11,10 +11,7 @@ struct ChampionsView: View {
     @State private var showOnlyFavorites = false
     @State private var sortDescending = false
     @State private var navigationPath: [String] = []
-    @State private var aram = ARAMState()
-    @State private var showingARAM = false
-    @State private var galleryPresented = false
-    @State private var pendingShake: DeviceShakeEvent?
+    @StateObject private var aram = ARAMShakeController()
 
     @Environment(\.accessibilityReduceMotion) private var reduceMotion
     @Environment(\.scenePhase) private var scenePhase
@@ -135,7 +132,7 @@ struct ChampionsView: View {
                 if let champion = viewModel.champions.first(where: { $0.id == championID }) {
                     ChampionDetailView(champion: champion, viewModel: viewModel,
                                        enableShakeDetection: true) { presented in
-                        updateGallery(presented)
+                        aram.setGalleryPresented(presented)
                     }
                 } else {
                     ContentUnavailableView("Champion introuvable",
@@ -148,33 +145,27 @@ struct ChampionsView: View {
         .background {
             ShakeEventReceiver(enabled: isActive && scenePhase == .active)
         }
-        // Keep this listener for shakes on the catalog or a manually opened
-        // champion. The full-screen screen also listens, because SwiftUI can
-        // pause delivery to the presenting view while a cover is visible.
-        .onReceive(NotificationCenter.default.publisher(for: UIDevice.deviceDidShakeNotification)) { notification in
-            guard let event = notification.userInfo?["shake"] as? DeviceShakeEvent else { return }
-            receiveShake(event)
+        // The UIKit notification is owned by ARAMShakeController, not by
+        // either SwiftUI screen. Presenting a full-screen cover cannot cancel it.
+        .onAppear {
+            aram.setTabActive(isActive)
+            aram.setChampions(viewModel.champions.map(\.id))
         }
         .onChange(of: isActive) { _, active in
-            if !active { pendingShake = nil }
+            aram.setTabActive(active)
         }
-        .onChange(of: scenePhase) { _, phase in
-            if phase != .active { pendingShake = nil }
+        .onChange(of: viewModel.champions.map(\.id)) { _, ids in
+            aram.setChampions(ids)
         }
-        // This cover is presented once. A new shake only changes its content;
-        // no additional champion card is ever pushed on the navigation stack.
-        .fullScreenCover(isPresented: $showingARAM, onDismiss: {
-            aram.reset()
-            galleryPresented = false
-            pendingShake = nil
+        .fullScreenCover(isPresented: $aram.isShowingARAM, onDismiss: {
+            aram.didDismiss()
             navigationPath.removeAll()
         }) {
             ARAMChampionPresentation(
-                state: $aram,
+                aram: aram,
                 viewModel: viewModel,
-                onClose: { showingARAM = false },
-                onGalleryChange: updateGallery,
-                onShake: receiveShake
+                onClose: { aram.close() },
+                onGalleryChange: { aram.setGalleryPresented($0) }
             )
         }
     }
@@ -228,59 +219,27 @@ struct ChampionsView: View {
         showOnlyFavorites = false
     }
 
-    private func receiveShake(_ event: DeviceShakeEvent) {
-        guard isActive, scenePhase == .active else { return }
-
-        // If a skin image is enlarged, keep it intact. The most recent shake
-        // takes effect immediately after that gallery is dismissed.
-        if galleryPresented {
-            pendingShake = event
-            return
-        }
-
-        // Always use the full champion catalog, even if the catalog search or
-        // role filter happens to be empty. The shake is an independent ARAM draw.
-        let result = aram.receiveShake(
-            eventID: event.id,
-            timestamp: event.timestamp,
-            candidateIDs: viewModel.champions.map(\.id)
-        )
-        guard result.isAccepted else { return }
-
-        #if DEBUG
-        print("[LeagueDex ARAM] Champion tiré: \(aram.currentChampionID ?? "aucun"), révision \(aram.revision)")
-        #endif
-        UIImpactFeedbackGenerator(style: .medium).impactOccurred()
-        if !showingARAM { showingARAM = true }
-    }
-
-    private func updateGallery(_ isPresented: Bool) {
-        galleryPresented = isPresented
-        guard !isPresented, let event = pendingShake else { return }
-        pendingShake = nil
-        receiveShake(event)
-    }
 }
 
 private struct ARAMChampionPresentation: View {
-    @Binding var state: ARAMState
+    @ObservedObject var aram: ARAMShakeController
     @ObservedObject var viewModel: ChampionViewModel
     let onClose: () -> Void
     let onGalleryChange: (Bool) -> Void
-    let onShake: (DeviceShakeEvent) -> Void
 
     var body: some View {
         NavigationStack {
             Group {
-                if let championID = state.currentChampionID,
+                if let championID = aram.currentChampionID,
                    let champion = viewModel.champions.first(where: { $0.id == championID }) {
                     ChampionDetailView(
                         champion: champion,
                         viewModel: viewModel,
                         onGalleryChange: onGalleryChange
                     )
-                    // New card identity resets scroll, selected spell and stats.
-                    .id(state.revision)
+                    // Every accepted shake constructs a fresh complete champion
+                    // detail, with its scroll position and selection reset.
+                    .id(aram.revision)
                 } else {
                     ContentUnavailableView(
                         "Champion indisponible",
@@ -300,16 +259,10 @@ private struct ARAMChampionPresentation: View {
         }
         .tint(LeagueTheme.gold)
         .background(LeagueTheme.background)
-        // This receiver remains mounted in the full-screen presentation even
-        // when the champion detail is recreated for a reroll.
+        // Keep a UIKit first responder on the visible full-screen page. Shake
+        // notifications go directly to the persistent observable controller.
         .background {
-            ShakeEventReceiver(enabled: true, reactivation: state.revision)
-        }
-        // The listener inside the cover makes rerolls reliable on the champion
-        // page. The selector discards a duplicate notification automatically.
-        .onReceive(NotificationCenter.default.publisher(for: UIDevice.deviceDidShakeNotification)) { notification in
-            guard let event = notification.userInfo?["shake"] as? DeviceShakeEvent else { return }
-            onShake(event)
+            ShakeEventReceiver(enabled: true, reactivation: aram.revision)
         }
     }
 }
