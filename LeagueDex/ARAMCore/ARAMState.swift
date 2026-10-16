@@ -31,10 +31,28 @@ struct ARAMState: Sendable {
         candidateIDs: [String],
         selectIndex: (Int) -> Int = { Int.random(in: 0..<$0) }
     ) -> ShakeResult {
-        guard timestamp.isFinite, lastEventID != eventID else { return .ignored }
-        if let lastAcceptedTimestamp,
-           timestamp - lastAcceptedTimestamp < minimumShakeInterval {
+        guard timestamp.isFinite else {
+            #if DEBUG
+            print("[LeagueDex ARAM] Shake ignoré : horodatage non fini")
+            #endif
             return .ignored
+        }
+        guard lastEventID != eventID else {
+            #if DEBUG
+            print("[LeagueDex ARAM] Shake ignoré : événement déjà traité")
+            #endif
+            return .ignored
+        }
+        if let lastAcceptedTimestamp {
+            let elapsed = timestamp - lastAcceptedTimestamp
+            // A clock discontinuity must not lock ARAM indefinitely. The
+            // normal case still suppresses duplicate UIKit callbacks.
+            if elapsed >= 0 && elapsed < minimumShakeInterval {
+                #if DEBUG
+                print("[LeagueDex ARAM] Shake ignoré : délai \(elapsed)s < \(minimumShakeInterval)s")
+                #endif
+                return .ignored
+            }
         }
 
         var seen = Set<String>()
