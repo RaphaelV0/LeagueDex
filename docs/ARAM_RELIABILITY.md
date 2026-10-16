@@ -23,6 +23,42 @@ Si une galerie de skin est ouverte, le dernier shake est conservé puis appliqu�
 
 Les catalogues, la connexion Firebase, les builds, le quiz, les favoris, la carte et le cache d'images ne sont pas modifiés.
 
+## Correctif — shakes qui ne fonctionnent qu'une fois
+
+Sur iPhone, `UIResponder.motionEnded` est remis au *first responder* UIKit.
+La méthode de secours `UIWindow.motionEnded` n'est donc pas garantie d'être
+appelée après la présentation plein écran SwiftUI : le shake initial peut ouvrir
+l'ARAM mais les secousses suivantes peuvent ne plus atteindre le sélecteur.
+
+Le récepteur `ShakeEventReceiver` (un petit `UIViewControllerRepresentable`)
+se déclare premier répondant dans son `viewDidAppear`, abandonne ce statut à
+sa disparition et se réactive lorsque l'identité du champion ARAM change.
+Il est monté sur trois surfaces : catalogue actif, fiche de champion ouverte
+manuellement depuis Champions, et navigation ARAM en plein écran. La
+présentation ARAM ne détruit pas son récepteur lors des tirages.
+
+Le secours `UIWindow` reste disponible si un autre objet de l'interface
+transmet son mouvement à la fenêtre. Tous les récepteurs déclenchent la même
+notification et le noyau `ARAMState` ignore les doubles déclenchements.
+Aucune détection n'est activée pour les autres onglets.
+
+### Vérifier la chaîne réelle sur Xcode
+
+1. Brancher **un véritable iPhone**, lancer le scheme LeagueDex en Debug.
+2. Ouvrir Champions puis secouer une fois : chercher les deux messages :
+   `[LeagueDex ARAM] UIKit shake received` et
+   `[LeagueDex ARAM] Champion tiré: …, révision 1`.
+3. Sans fermer ARAM, secouer à nouveau après environ une seconde :
+   chercher une **nouvelle** paire de messages et une révision 2, puis 3, etc.
+4. Si le premier message est absent, le geste n'arrive pas au récepteur UIKit.
+   Si le premier apparaît sans le second, le filtrage de l'événement empêche
+   le tirage ; vérifier l'onglet et l'état de l'application.
+5. Tester également une fiche ouverte manuellement, puis les onglets
+   Accueil / Objets / Lieux où ARAM doit rester inactif.
+
+Les messages sont compilés uniquement en Debug. Aucun nouveau mécanisme
+automatique, bouton de tirage ou écriture Firebase n'a été ajouté.
+
 ## Vérifications
 
 ### Automatisées
