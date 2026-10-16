@@ -1,7 +1,7 @@
 import SwiftUI
 
+/// A single, unobtrusive banner explains why cached Firestore data is shown.
 struct SyncStatusBanner: View {
-    @EnvironmentObject private var userData: UserDataStore
     @EnvironmentObject private var champions: ChampionViewModel
     @EnvironmentObject private var items: ItemViewModel
     @ObservedObject private var network = ConnectivityStore.shared
@@ -9,10 +9,10 @@ struct SyncStatusBanner: View {
 
     private var message: String? {
         if !network.isOnline { return "Hors ligne · données déjà téléchargées" }
-        if let error = favorites.errorMessage ?? userData.errorMessage { return error }
-        if userData.hasPendingWrites || favorites.hasPendingWrites { return "Modifications en attente de synchronisation" }
-        if userData.isFromCache || champions.isFromCache || items.isFromCache || favorites.isFromCache {
-            return "Données en cache · connexion au serveur en cours"
+        if let error = favorites.errorMessage { return error }
+        if favorites.hasPendingWrites { return "Favoris en cours de synchronisation" }
+        if champions.isFromCache || items.isFromCache || favorites.isFromCache {
+            return "Synchronisation Firebase en cours"
         }
         return nil
     }
@@ -26,7 +26,6 @@ struct SyncStatusBanner: View {
                 .padding(.horizontal, LeagueTheme.Space.md)
                 .padding(.vertical, LeagueTheme.Space.sm)
                 .background(LeagueTheme.surface)
-                .accessibilityElement(children: .combine)
         }
     }
 }
