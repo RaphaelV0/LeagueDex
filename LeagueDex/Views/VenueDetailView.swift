@@ -6,7 +6,7 @@ import CoreLocation
 struct VenueDetailView: View {
     let venue: DBVenue
     let userCoordinate: CLLocationCoordinate2D?
-@Environment(\.dismiss) private var dismiss
+    @Environment(\.dismiss) private var dismiss
 
     private var routeURL: URL? {
         URL(string: "https://maps.apple.com/?daddr=\(venue.latitude),\(venue.longitude)&dirflg=d")
