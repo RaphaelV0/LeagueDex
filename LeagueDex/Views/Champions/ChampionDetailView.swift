@@ -6,18 +6,21 @@ struct ChampionDetailView: View {
     private let initialFallback: DBChampion
     private let onGalleryChange: (Bool) -> Void
     private let showsARAMHint: Bool
+    private let enableShakeDetection: Bool
 
     var champion: DBChampion {
         viewModel.champions.first(where: { $0.id == championId }) ?? initialFallback
     }
 
     init(champion: DBChampion, viewModel: ChampionViewModel, showsARAMHint: Bool = true,
+         enableShakeDetection: Bool = false,
          onGalleryChange: @escaping (Bool) -> Void = { _ in }) {
         self.initialFallback = champion
         self.championId = champion.id
         self.viewModel = viewModel
         self.onGalleryChange = onGalleryChange
         self.showsARAMHint = showsARAMHint
+        self.enableShakeDetection = enableShakeDetection
     }
 
     @ScaledMetric(relativeTo: .largeTitle) private var scalableHeroHeight: CGFloat = 320
@@ -93,6 +96,14 @@ struct ChampionDetailView: View {
                 }
             }
             .background(LeagueTheme.background)
+        }
+        // An ordinary champion opened from the Champions tab must receive
+        // shakes even after its NavigationStack push changes first responder.
+        // Details opened from other tabs never install an active receiver.
+        .background {
+            if enableShakeDetection {
+                ShakeEventReceiver(enabled: true)
+            }
         }
         // Respect the navigation bar and safe area: a new ARAM detail must fill
         // the available screen without appearing under the status/navigation bars.
