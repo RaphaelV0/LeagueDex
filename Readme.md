@@ -9,11 +9,11 @@ LeagueDex est une encyclopédie **League of Legends** réalisée en SwiftUI. Le 
 3. **Favoris** : sélection de champions synchronisée dans `users/{uid}/favorites`.
 4. **Mode ARAM** : dans l'onglet Champions, **secouer physiquement l'iPhone** choisit un champion aléatoire. Une deuxième secousse **depuis cette même fiche** remplace le champion sans empiler les pages. La fiche ouverte manuellement dans Champions accepte aussi ce geste. **Aucun bouton de tirage.**
 5. **Objets** : catalogue Firestore des objets, recherche, description et prix.
-6. **Lieux e-sport** : carte MapKit en lecture seule des documents Firestore `venues`, fiche du lieu et itinéraire Apple Plans. La localisation reste facultative.
+6. **Lieux e-sport** : carte MapKit des lieux Firestore `venues`, recherche, fiche et itinéraire Apple Plans. Un compte connecté peut **ajouter un lieu** via le bouton **+** après vérification de l'adresse avec Apple Plans. La localisation GPS est facultative.
 
 Le menu comporte quatre onglets : **Champions, Objets, Lieux, Compte**.
 
-Les fonctionnalités commerciales et communautaires avancées (créateur de builds, comparateur, quiz, défis quotidiens, propositions et modération de lieux) ont été **retirées du code**.
+Les fonctionnalités premium (créateur de builds, comparateur, quiz, défis quotidiens) et le système avancé de modération ont été **retirés du code**. L'ajout simple de lieux est conservé.
 
 ## Architecture
 
@@ -25,7 +25,7 @@ Les fonctionnalités commerciales et communautaires avancées (créateur de buil
 - MapKit et CoreLocation pour afficher les lieux et, avec autorisation, la position.
 - Une sélection ARAM en Swift pur (`ARAMCore/ARAMState.swift`) et un récepteur UIKit du geste piloté par `Services/ARAMShakeController.swift`.
 
-**Sécurité :** les utilisateurs connectés lisent les catalogues, mais seul un compte administrateur peut écrire dans les collections publiques. Chaque utilisateur modifie uniquement ses propres favoris. L'app ne recrée pas les catalogues en écrivant depuis l'iPhone.
+**Sécurité :** les utilisateurs connectés lisent les catalogues. Seul un administrateur peut modifier les champions et les objets. Un utilisateur connecté peut **créer un lieu** dont les champs sont vérifiés par Firestore, mais seuls les administrateurs peuvent modifier ou supprimer un lieu existant. Chaque utilisateur modifie uniquement ses propres favoris.
 
 ## Démarrer dans Xcode
 
@@ -35,6 +35,7 @@ Les fonctionnalités commerciales et communautaires avancées (créateur de buil
 4. Activer **Email/Password** dans Firebase Console → Authentication → Sign-in method.
 5. Vérifier les collections `champions`, `items` et `venues` sur le projet Firestore configuré.
 6. Sélectionner le schéma **LeagueDex**, un iPhone ou simulateur et lancer avec **⌘ + R**.
+7. Pour tester l'ajout : onglet **Lieux → + → saisir une adresse → Vérifier l'adresse → Ajouter sur la carte**. Le lieu doit apparaître après validation par Firestore. **Les règles Firestore modifiées doivent être déployées manuellement sur le bon projet Firebase avant ce test réel.**
 
 Le **vrai shake** doit être testé sur un **iPhone physique**, pas seulement dans le simulateur.
 
