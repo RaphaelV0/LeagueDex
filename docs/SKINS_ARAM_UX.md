@@ -6,11 +6,11 @@
 - Une vue plein écran présente l'illustration Riot en grand, avec bouton « Fermer », pincement pour zoomer et double toucher pour agrandir/réinitialiser.
 - L'illustration plein écran continue d'utiliser le cache d'images LeagueDex existant.
 - Le shake ouvre une **unique présentation ARAM plein écran** ; les secousses suivantes changent le champion affiché sans modifier la pile de navigation.
-- L'ouverture et l'identifiant du champion sont portés par un seul élément `Identifiable`, transmis à `fullScreenCover(item:)`. Cela évite d'ouvrir une présentation dont la sélection serait encore absente au premier affichage.
+- L'ARAM utilise maintenant une seule présentation `fullScreenCover(isPresented:)` avec un champion actif ; changer de champion ne rouvre pas la présentation.
 - L'identité de la présentation reste stable entre les tirages. Si le champion disparaît du catalogue, une erreur avec réessai remplace le chargement sans fin et **Fermer ARAM** reste accessible.
 - La fiche ARAM se reconstruit à chaque tirage pour repartir du haut de l'écran (nouvelle identité de vue) ; aucune animation de pile ne doit laisser une fiche partiellement visible.
 - Le bouton **Fermer ARAM** ramène au catalogue Champions. Les fiches des tirages précédents ne sont jamais empilées.
-- Un seul abonnement aux shakes alimente la session ARAM. La protection anti-doublon est de 0,3 seconde ; les filtres s'appliquent au premier tirage depuis le catalogue.
+- Deux surfaces peuvent recevoir la notification pendant une transition (catalogue et plein écran) ; une seule logique de tirage ignore les doublons d'événement et applique un délai de 0,45 seconde. Le tirage choisit toujours dans le catalogue complet, même avec des filtres actifs.
 
 ## Vérifications sur iPhone
 
