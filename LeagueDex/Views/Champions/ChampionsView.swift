@@ -12,6 +12,9 @@ struct ChampionsView: View {
     @State private var sortDescending = false
     @State private var navigationPath: [String] = []
     @State private var aram = ARAMState()
+    @State private var showingARAM = false
+    @State private var galleryPresented = false
+    @State private var pendingShake: DeviceShakeEvent?
 
     @Environment(\.accessibilityReduceMotion) private var reduceMotion
     @Environment(\.scenePhase) private var scenePhase
@@ -41,7 +44,6 @@ struct ChampionsView: View {
 
     var body: some View {
         let results = filteredChampions
-        let presentedSessionID = aram.session?.id
 
         NavigationStack(path: $navigationPath) {
             ScrollView {
@@ -132,7 +134,7 @@ struct ChampionsView: View {
             .navigationDestination(for: String.self) { championID in
                 if let champion = viewModel.champions.first(where: { $0.id == championID }) {
                     ChampionDetailView(champion: champion, viewModel: viewModel) { presented in
-                        updateGallery(presented, sessionID: nil)
+                        updateGallery(presented)
                     }
                 } else {
                     ContentUnavailableView("Champion introuvable",
@@ -140,28 +142,33 @@ struct ChampionsView: View {
                 }
             }
         }
-        // A single subscriber remains mounted underneath both full-screen
-        // presentations. Process events directly, without coalescing them into
-        // a "latest event" @State that could lose distinct queued gestures.
+        // Keep this listener for shakes on the catalog or a manually opened
+        // champion. The full-screen screen also listens, because SwiftUI can
+        // pause delivery to the presenting view while a cover is visible.
         .onReceive(NotificationCenter.default.publisher(for: UIDevice.deviceDidShakeNotification)) { notification in
             guard let event = notification.userInfo?["shake"] as? DeviceShakeEvent else { return }
             receiveShake(event)
         }
         .onChange(of: isActive) { _, active in
-            if !active { aram.discardPendingSelection() }
+            if !active { pendingShake = nil }
         }
         .onChange(of: scenePhase) { _, phase in
-            if phase != .active { aram.discardPendingSelection() }
+            if phase != .active { pendingShake = nil }
         }
-        .fullScreenCover(item: presentedSession, onDismiss: {
-            guard let presentedSessionID else { return }
-            aram.presentationDidDismiss(sessionID: presentedSessionID,
-                                        isActive: isActive, sceneIsActive: scenePhase == .active)
-            returnToCatalogIfOpening()
-        }) { session in
+        // This cover is presented once. A new shake only changes its content;
+        // no additional champion card is ever pushed on the navigation stack.
+        .fullScreenCover(isPresented: $showingARAM, onDismiss: {
+            aram.reset()
+            galleryPresented = false
+            pendingShake = nil
+            navigationPath.removeAll()
+        }) {
             ARAMChampionPresentation(
-                state: $aram, initialSession: session, viewModel: viewModel,
-                onGalleryChange: { updateGallery($0, sessionID: session.id) }
+                state: $aram,
+                viewModel: viewModel,
+                onClose: { showingARAM = false },
+                onGalleryChange: updateGallery,
+                onShake: receiveShake
             )
         }
     }
@@ -215,84 +222,67 @@ struct ChampionsView: View {
         showOnlyFavorites = false
     }
 
-    private var presentedSession: Binding<ARAMState.Session?> {
-        Binding {
-            aram.phase == .closing ? nil : aram.session
-        } set: { session in
-            if session == nil, let id = aram.session?.id {
-                aram.close(sessionID: id)
-            }
-        }
-    }
-
     private func receiveShake(_ event: DeviceShakeEvent) {
-        // From the catalog use active filters; within a detail/session preserve
-        // the established all-champions pool, excluding the last selected ID.
-        let inDetail = aram.session != nil || aram.pendingChampionID != nil || !navigationPath.isEmpty
-        let candidates = inDetail ? viewModel.champions : filteredChampions
+        guard isActive, scenePhase == .active else { return }
+
+        // If a skin image is enlarged, keep it intact. The most recent shake
+        // takes effect immediately after that gallery is dismissed.
+        if galleryPresented {
+            pendingShake = event
+            return
+        }
+
+        // Always use the full champion catalog, even if the catalog search or
+        // role filter happens to be empty. The shake is an independent ARAM draw.
         let result = aram.receiveShake(
-            eventID: event.id, timestamp: event.timestamp, isActive: isActive,
-            sceneIsActive: scenePhase == .active, candidateIDs: candidates.map(\.id),
-            currentChampionID: navigationPath.last
+            eventID: event.id,
+            timestamp: event.timestamp,
+            candidateIDs: viewModel.champions.map(\.id)
         )
         guard result.isAccepted else { return }
+
         UIImpactFeedbackGenerator(style: .medium).impactOccurred()
-        returnToCatalogIfOpening()
+        if !showingARAM { showingARAM = true }
     }
 
-    private func updateGallery(_ presented: Bool, sessionID: UUID?) {
-        aram.setGalleryPresented(presented, sessionID: sessionID,
-                                 isActive: isActive, sceneIsActive: scenePhase == .active)
-        returnToCatalogIfOpening()
-    }
-
-    private func returnToCatalogIfOpening() {
-        // Only entering ARAM from a manual detail clears the catalog's path.
-        // Rerolls never push, pop or otherwise modify normal navigation.
-        guard aram.phase == .opening, !navigationPath.isEmpty else { return }
-        var noAnimation = Transaction()
-        noAnimation.disablesAnimations = true
-        withTransaction(noAnimation) {
-            navigationPath.removeAll()
-        }
+    private func updateGallery(_ isPresented: Bool) {
+        galleryPresented = isPresented
+        guard !isPresented, let event = pendingShake else { return }
+        pendingShake = nil
+        receiveShake(event)
     }
 }
 
 private struct ARAMChampionPresentation: View {
     @Binding var state: ARAMState
-    let initialSession: ARAMState.Session
     @ObservedObject var viewModel: ChampionViewModel
+    let onClose: () -> Void
     let onGalleryChange: (Bool) -> Void
-    @Environment(\.accessibilityReduceMotion) private var reduceMotion
-
-    private var session: ARAMState.Session {
-        guard let current = state.session, current.id == initialSession.id else { return initialSession }
-        return current
-    }
+    let onShake: (DeviceShakeEvent) -> Void
 
     var body: some View {
         NavigationStack {
             Group {
-                if let champion = viewModel.champions.first(where: { $0.id == session.championID }) {
-                    ChampionDetailView(champion: champion, viewModel: viewModel,
-                                       onGalleryChange: onGalleryChange)
-                        .id(session.revision)
-                        .transition(.opacity)
+                if let championID = state.currentChampionID,
+                   let champion = viewModel.champions.first(where: { $0.id == championID }) {
+                    ChampionDetailView(
+                        champion: champion,
+                        viewModel: viewModel,
+                        onGalleryChange: onGalleryChange
+                    )
+                    // New card identity resets scroll, selected spell and stats.
+                    .id(state.revision)
                 } else {
-                    LeagueErrorState(
-                        message: "Ce champion n’est plus disponible dans le catalogue. Réessayez ou secouez l’iPhone pour un nouveau tirage."
-                    ) {
-                        viewModel.fetchChampionsFromFirebase()
-                    }
-                    .padding(LeagueTheme.Space.md)
+                    ContentUnavailableView(
+                        "Champion indisponible",
+                        systemImage: "person.crop.circle.badge.questionmark",
+                        description: Text("Secoue à nouveau l’iPhone pour choisir un champion.")
+                    )
                 }
             }
-            .animation(reduceMotion ? nil : LeagueMotion.quick, value: session.revision)
             .toolbar {
                 ToolbarItem(placement: .topBarLeading) {
-                    Button {
-                        state.close(sessionID: initialSession.id)
-                    } label: {
+                    Button(action: onClose) {
                         Label("Fermer ARAM", systemImage: "xmark")
                     }
                     .accessibilityLabel("Fermer le mode ARAM et revenir au catalogue")
@@ -301,6 +291,11 @@ private struct ARAMChampionPresentation: View {
         }
         .tint(LeagueTheme.gold)
         .background(LeagueTheme.background)
-        .onAppear { state.presentationDidAppear(sessionID: initialSession.id) }
+        // The listener inside the cover makes rerolls reliable on the champion
+        // page. The selector discards a duplicate notification automatically.
+        .onReceive(NotificationCenter.default.publisher(for: UIDevice.deviceDidShakeNotification)) { notification in
+            guard let event = notification.userInfo?["shake"] as? DeviceShakeEvent else { return }
+            onShake(event)
+        }
     }
 }
