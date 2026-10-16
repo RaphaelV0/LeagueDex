@@ -122,9 +122,18 @@ final class AuthenticationStore: ObservableObject {
 
     private static func message(for error: Error) -> String {
         let error = error as NSError
+        #if DEBUG
+        // These diagnostics help identify SDK, API-key and app-verification errors
+        // without printing the email, password, access token or the userInfo payload.
+        print("[LeagueDex Auth] Firebase error: domain=\(error.domain) code=\(error.code)")
+        #endif
         guard error.domain == AuthErrorDomain,
               let code = AuthErrorCode(rawValue: error.code) else {
+            #if DEBUG
+            return "Authentification impossible (erreur \(error.code)). Consulte le code d’erreur dans la console Xcode."
+            #else
             return "L’opération a échoué. Réessayez dans quelques instants."
+            #endif
         }
         switch code {
         case .invalidEmail:
@@ -142,11 +151,23 @@ final class AuthenticationStore: ObservableObject {
         case .userDisabled:
             return "Ce compte est désactivé. Contactez l’assistance."
         case .operationNotAllowed:
-            return "La connexion par e-mail est momentanément indisponible. Réessayez plus tard."
+            return "La connexion e-mail / mot de passe est désactivée. Active-la dans Firebase Console → Authentication → Sign-in method."
+        case .invalidAPIKey:
+            return "Clé API Firebase invalide. Vérifie que GoogleService-Info.plist provient du bon projet Firebase."
+        case .appNotAuthorized:
+            return "LeagueDex n’est pas autorisée à utiliser cette clé Firebase. Vérifie le Bundle Identifier et les restrictions de la clé API."
+        case .keychainError:
+            return "Impossible d’accéder au trousseau sécurisé de l’iPhone. Vérifie la configuration et relance l’application."
+        case .internalError:
+            return "Erreur interne Firebase Authentication. Consulte le code d’erreur dans la console Xcode."
         case .requiresRecentLogin:
             return "Reconnectez-vous avant de réessayer cette opération."
         default:
+            #if DEBUG
+            return "Firebase Authentication a refusé l’opération (code \(error.code)). Consulte la console Xcode."
+            #else
             return "L’authentification a échoué. Réessayez dans quelques instants."
+            #endif
         }
     }
 }
