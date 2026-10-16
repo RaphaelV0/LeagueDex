@@ -13,12 +13,13 @@ extension UIDevice {
     /// Both the responder attached to SwiftUI screens and the window fallback
     /// post the exact same type of event, so selection has one code path.
     static func announceShake(_ event: UIEvent?) {
-        let shake = DeviceShakeEvent(
-            id: UUID(),
-            timestamp: event?.timestamp ?? ProcessInfo.processInfo.systemUptime
-        )
+        // UIKit can provide the same/stale UIEvent timestamp for successive
+        // motion callbacks. Use the actual receipt time for the debounce clock.
+        // Otherwise every shake after the first can be suppressed forever.
+        let receiptTime = ProcessInfo.processInfo.systemUptime
+        let shake = DeviceShakeEvent(id: UUID(), timestamp: receiptTime)
         #if DEBUG
-        print("[LeagueDex ARAM] UIKit shake received")
+        print("[LeagueDex ARAM] UIKit shake received: uptime=\(receiptTime), eventTimestamp=\(event?.timestamp ?? -1)")
         #endif
         NotificationCenter.default.post(
             name: UIDevice.deviceDidShakeNotification,
